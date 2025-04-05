@@ -16,7 +16,7 @@ initial begin
     $readmemh("utils/data.mem",mem);
 end
 
-assign addr = logicAddr[`DATA_ADDR-1:0];//use only lower 14 bits of a word(32 bits) to addressing the memory space
+assign addr = logicAddr[`DATA_ADDR-1:0];//use only lower 14 bits of a word(32 bits) to address the memory space
 assign data_o = {mem[addr],mem[addr+1],mem[addr+2],mem[addr+3]};
 
 always @(posedge clk)begin
