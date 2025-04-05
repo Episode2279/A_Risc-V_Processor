@@ -11,3 +11,5 @@
 `define WORD_SIZE 32 
 `define INS_SIZE 32
 `define instruction logic[`INS_SIZE-1:0] 
+
+//data size 4 Bytes * 64 entries = 256 Bytes

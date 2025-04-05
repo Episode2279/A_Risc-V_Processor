@@ -1,16 +1,16 @@
 `include "Types.v"
-module insnMem(
+module dataMem(
     input logic clk,
     input `instructionAddrPath addr,
 
-    output `instruction instruction_o
+    output `instruction data_o
 );
 
     instruction mem[0:`INS_ADDR_SIZE-1];
 
 initial begin
-    $readmemh("utils/insn.mem",mem);
+    $readmemh("utils/data.mem",mem);
 end
 
-assign instruction_o = mem[addr];
+assign data_o = mem[addr];
 endmodule
