@@ -14,4 +14,5 @@
 
 //data size 4 Bytes * 4096 entries =2^14 Bytes,need 14 bits to addressing.
 `define DATA_ADDR 14
-`define DATA_ADDR_SIZE 14
+`define DATA_ADDR_SIZE 16384
+`define dataAddrPath logic[`DATA_ADDR-1:0]
