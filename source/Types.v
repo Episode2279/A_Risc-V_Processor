@@ -12,4 +12,6 @@
 `define INS_SIZE 32
 `define instruction logic[`INS_SIZE-1:0] 
 
-//data size 4 Bytes * 64 entries = 256 Bytes
+//data size 4 Bytes * 4096 entries =2^14 Bytes,need 14 bits to addressing.
+`define DATA_ADDR 14
+`define DATA_ADDR_SIZE 14

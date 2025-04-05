@@ -15,10 +15,10 @@ always_comb begin
     aluCtr = `FALSE;
     // decode structure {func7,func3,opcode}.
     casex ({insn[31:25],insn[14:12],insn[6:0]})
-        17'bxxxxxxx_011_0000011:begin //ld
+        17'bxxxxxxx_010_0000011:begin //lw
             registerWriteEnable = `TRUE;
         end
-        17'bxxxxxxx_011_0100011:begin //sd
+        17'bxxxxxxx_010_0100011:begin //sw
             dataWriteEnable = `TRUE;
         end
     endcase
