@@ -6,7 +6,7 @@ module Decoder(
     output logic registerWriteEnable,
     output logic dataWriteEnable,
     output logic branchCtr,
-    output ctrALU aluCtr
+    output `ctrALU aluCtr
 );
 always_comb begin
     //default controll signal
