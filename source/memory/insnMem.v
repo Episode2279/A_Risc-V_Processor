@@ -6,7 +6,7 @@ module insnMem(
     output `instruction instruction_o
 );
 
-    instruction mem[0:`INS_ADDR_SIZE-1];
+    `block mem[0:`INS_ADDR_SIZE-1];
 
 initial begin
     $readmemh("utils/insn.mem",mem);
