@@ -25,3 +25,10 @@
 `define REG_NUM 32
 `define REG_ADDR 5
 `define regAddr logic[`REG_ADDR-1:0]
+
+//ALU controll signal
+`define ctrALU logic[1:0]
+`define AND 2b'11
+`define OR 2b'10
+`define ADD 2b'00
+`define SUB 2b'01
