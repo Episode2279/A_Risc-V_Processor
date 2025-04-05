@@ -11,7 +11,7 @@ module PC(
 
     `instructionAddrPath pc;
     always @(posedge clk or negedge rst) begin
-        if(~reset) begin
+        if(~rst) begin
             pc <= `RESET_VECTOR;
         end
         else if(jump_enable) begin
