@@ -8,8 +8,8 @@ module IF_IDRegister(
     input `instructionAddrPath pc_i,
     input logic stall,
 
-    input `instruction instruction_o,
-    input `instructionAddrPath pc_o
+    output `instruction instruction_o,
+    output `instructionAddrPath pc_o
 );
 
     always*(posedge clk or negedge rst)begin

@@ -6,13 +6,20 @@ module IdStages(
 
     input `instruction insn,
     input `instructionAddrPath pc,
+
+    output logic registerWriteEnable,
+    output logic dataWriteEnable,
+    output logic regSelect,
+    output `ctrBranch branchCtr,
+    output `ctrALU aluCtr,
+
+    output `regAddr rs1,
+    output `regAddr rs2,
+    output `regAddr rd,
+    output `instructionAddrPath offset
 );
 
-    logic registerWriteEnable;
-    logic dataWriteEnable;
-    logic regSelect;
-    `ctrBranch branchCtr;
-    `ctrALU aluCtr;
+
 
     Decoder decoder(
         .insn(insn),
@@ -20,7 +27,12 @@ module IdStages(
         .dataWriteEnable(dataWriteEnable),
         .regSelect(regSelect),
         .branchCtr(branchCtr),
-        .aluCtr(aluCtr)
+        .aluCtr(aluCtr),
+        .rs1(rs1),
+        .rs2(rs2),
+        .rd(rd),
+        .offset(offset)
     )
+
 
 endmodule

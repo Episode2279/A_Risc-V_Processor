@@ -4,6 +4,7 @@ module PC(
     input logic rst,
     
     input logic jump_enable,
+    input logic wrEnable,
     input `instructionAddrPath jump_address,
     
     output `instructionAddrPath pc_address_out
@@ -14,11 +15,13 @@ module PC(
         if(~rst) begin
             pc <= `RESET_VECTOR;
         end
-        else if(jump_enable) begin
-            pc<= jump_address;
-        end
-        else begin
-            pc<=pc+4;
+        else if(wrEnable) begin
+            else if(jump_enable) begin
+                pc<= jump_address;
+            end
+            else begin
+                pc<=pc+4;
+            end
         end
     end
 

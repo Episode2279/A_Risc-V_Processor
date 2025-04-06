@@ -7,9 +7,21 @@ module Decoder(
     output logic dataWriteEnable,
     output logic regSelect,
     output `ctrBranch branchCtr,
-    output `ctrALU aluCtr
+    output `ctrALU aluCtr,
+
+    output `regAddr rs1,
+    output `regAddr rs2,
+    output `regAddr rd,
+    output `instructionAddrPath offset
 );
 always_comb begin
+
+    //addressing
+    rs1 = insn[19:15];
+    rs2 = insn[24:20];
+    rsd = insn[11:7];
+    offset = insn[11:7];
+
     //default controll signal
     regSelect = `FALSE;
     dataWriteEnable = `FALSE;
