@@ -32,3 +32,10 @@
 `define OR 2b'10
 `define ADD 2b'00
 `define SUB 2b'01
+
+//Branch controll signal
+
+`define ctrBranch logic[1:0]
+`define BEQ 00
+`define BLT 10
+`define NO_JUMP 01

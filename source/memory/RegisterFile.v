@@ -16,18 +16,18 @@ module RegisterFile(
     output `data rdB
 );
 
-`data regMem[0:`REG_NUM-1];
+    `data regMem[0:`REG_NUM-1];
 
-always @(posedge clk)begin
-    if(~rst) begin
-        regMem <='{default:`RESET_VECTOR};
+    always @(posedge clk)begin
+        if(~rst) begin
+            regMem <='{default:`RESET_VECTOR};
+        end
+        else if(writeEnable)begin
+            regMem[wrAddr] = data_i;
+        end
     end
-    else if(writeEnable)begin
-        regMem[wrAddr] = data_i;
-    end
-end
 
-assign rdA = regMem[rdAddrA];
-assign rdB = regMem[rdAddrB];
+    assign rdA = regMem[rdAddrA];
+    assign rdB = regMem[rdAddrB];
 
 endmodule

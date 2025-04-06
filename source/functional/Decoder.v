@@ -5,13 +5,16 @@ module Decoder(
 
     output logic registerWriteEnable,
     output logic dataWriteEnable,
-    output logic branchCtr,
+    output logic regSelect,
+    output `ctrBranch branchCtr,
     output `ctrALU aluCtr
 );
 always_comb begin
     //default controll signal
+    regSelect = `FALSE;
+    dataWriteEnable = `FALSE;
     registerWriteEnable = `FALSE;
-    branchCtr = `FALSE;
+    branchCtr = `NO_JUMP;
     aluCtr = `AND;
 
     // decode structure {func7,func3,opcode}.
@@ -24,18 +27,30 @@ always_comb begin
         end
         17'b0000000_111_0110011:begin //and
             registerWriteEnable = `TRUE;
+            regSelect = `TRUE;
         end
         17'b0000000_110_0110011:begin //or
             registerWriteEnable = `TRUE;
             aluCtr = `OR;
+            regSelect = `TRUE;
         end
         17'b0000000_000_0110011:begin //add
             registerWriteEnable = `TRUE;
             aluCtr = `ADD;
+            regSelect = `TRUE;
         end
         17'b0100000_000_0110011:begin //sub
             registerWriteEnable = `TRUE;
             aluCtr = `SUB;
+            regSelect = `TRUE;
+        end
+        17'b0100000_000_110011:begin //BEQ
+            aluCtr = `SUB;
+            branchCtr = `BEQ;
+        end
+        17'b0100000_100_110011:begin //BLT
+            aluCtr = `SUB;
+            branchCtr = `BLT;
         end
     endcase
 end
