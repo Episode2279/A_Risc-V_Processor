@@ -15,7 +15,7 @@ module Decoder(
     output `instructionAddrPath offset
 );
 
-    always_comb begin
+    always @(*) begin
 
         //addressing
         rs1 = insn[19:15];
