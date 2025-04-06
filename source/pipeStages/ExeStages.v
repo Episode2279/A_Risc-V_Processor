@@ -13,14 +13,21 @@ module ExeStages(
     input `ctrBranch branchCtr,
     input `ctrALU aluCtr,
 
-    input `regAddr rs1,
-    input `regAddr rs2,
-    input `regAddr rd,
-    input `instructionAddrPath offset
+    input `data dataA,
+    input `data dataB,
+
+    input `instructionAddrPath offset,
+
+    output `data out
 );
+    logic zero;
 
     ALU alu(
-
+        .ctr(aluCtr),
+        .dataA(dataA),
+        .dataB(dataB),
+        .out(out),
+        .zero(zero)
     );
 
 endmodule

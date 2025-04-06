@@ -13,9 +13,8 @@ module ID_EXERegister(
     input `ctrBranch branchCtr_i,
     input `ctrALU aluCtr_i,
 
-    input `regAddr rs1_i,
-    input `regAddr rs2_i,
-    input `regAddr rd_i,
+    input `data dataA_i,
+    input `data dataB_i,
     input `instructionAddrPath offset_i,
 
     output `instructionAddrPath pc_exe,
@@ -27,9 +26,8 @@ module ID_EXERegister(
     output `ctrBranch branchCtr_o,
     output `ctrALU aluCtr_o,
 
-    output `regAddr rs1_o,
-    output `regAddr rs2_o,
-    output `regAddr rd_o,
+    output `data dataA_o,
+    output `data dataB_o,
     output `instructionAddrPath offset_o
 
 );
@@ -45,9 +43,8 @@ module ID_EXERegister(
             branchCtr_o<=`RESET_VECTOR;
             aluCtr_o<=`RESET_VECTOR;
 
-            rs1_o<=`RESET_VECTOR;
-            rs2_o<=`RESET_VECTOR;
-            rd_o<=`RESET_VECTOR;
+            dataA_o<=`RESET_VECTOR;
+            dataB_o<=`RESET_VECTOR;
 
             offset_o<=`RESET_VECTOR;
         end
@@ -61,10 +58,9 @@ module ID_EXERegister(
                 branchCtr_o<=branchCtr_i;
                 aluCtr_o<=aluCtr_i;
 
-                rs1_o<=rs1_i;
-                rs2_o<=rs2_i;
-                rd_o<=rd_i;
-                
+                dataA_o<=dataA_i;
+                dataB_o<=dataB_i;
+
                 offset_o<=offset_i;
             end
         end

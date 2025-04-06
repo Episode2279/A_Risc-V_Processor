@@ -13,12 +13,14 @@ module IdStages(
     output `ctrBranch branchCtr,
     output `ctrALU aluCtr,
 
-    output `regAddr rs1,
-    output `regAddr rs2,
-    output `regAddr rd,
+    output `regAddr regA,
+    output `regAddr regB,
+
     output `instructionAddrPath offset
 );
 
+    `regAddr rs2;
+    `regAddr rd;
 
 
     Decoder decoder(
@@ -28,11 +30,13 @@ module IdStages(
         .regSelect(regSelect),
         .branchCtr(branchCtr),
         .aluCtr(aluCtr),
-        .rs1(rs1),
+        .rs1(regA),
         .rs2(rs2),
         .rd(rd),
         .offset(offset)
     );
+
+    //need a controller to determine rs2 and rd which decided by insn[5]
 
 
 endmodule
