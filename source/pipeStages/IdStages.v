@@ -32,7 +32,7 @@ module IdStages(
         .rs2(rs2),
         .rd(rd),
         .offset(offset)
-    )
+    );
 
 
 endmodule

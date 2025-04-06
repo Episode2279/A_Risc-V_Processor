@@ -21,12 +21,12 @@ module IfStages(
         .wrEnable(wrEnable),
         .jump_address(jump_address),
         .pc_address_out(pc)
-    )
+    );
 
     insnMem insnMem(
         .clk(clk),
         .addr(pc),
         .instruction_o(insn)
-    )
+    );
 
 endmodule
