@@ -12,7 +12,7 @@ module ALU(
 
     assign zero = (out==0);
 
-    always_comb begin
+    always @(*) begin
         case(ctr)
             AND:out = dataA & dataB;
             OR:out = dataA | dataB;
