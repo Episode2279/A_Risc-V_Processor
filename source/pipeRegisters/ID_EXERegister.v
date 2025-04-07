@@ -49,20 +49,18 @@ module ID_EXERegister(
             offset_o<=`RESET_VECTOR;
         end
         else begin
-            if(~stall)begin
-                pc_exe<=pc_id;
-                registerWriteEnable_o<=registerWriteEnable_i;
-                dataWriteEnable_o<=dataWriteEnable_i;
-                regSelect_o<=regSelect_i;
+            pc_exe<=pc_id;
+            registerWriteEnable_o<=registerWriteEnable_i;
+            dataWriteEnable_o<=dataWriteEnable_i;
+            regSelect_o<=regSelect_i;
 
-                branchCtr_o<=branchCtr_i;
-                aluCtr_o<=aluCtr_i;
+            branchCtr_o<=branchCtr_i;
+            aluCtr_o<=aluCtr_i;
 
-                dataA_o<=dataA_i;
-                dataB_o<=dataB_i;
+            dataA_o<=dataA_i;
+            dataB_o<=dataB_i;
 
-                offset_o<=offset_i;
-            end
+            offset_o<=offset_i;
         end
     end
 

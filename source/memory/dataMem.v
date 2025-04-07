@@ -1,7 +1,7 @@
 `include "Types.v"
 module dataMem(
     input logic clk,
-    input data logicAddr,
+    input `data logicAddr,
 
 
     input logic writeEnable,

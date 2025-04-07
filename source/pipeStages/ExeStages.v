@@ -6,27 +6,28 @@ module ExeStages(
 
     input `instructionAddrPath pc,
 
-    input logic registerWriteEnable,
-    input logic dataWriteEnable,
-    input logic regSelect,
+    //input logic registerWriteEnable,
+    //input logic dataWriteEnable,
+    //input logic regSelect,
 
-    input `ctrBranch branchCtr,
+    //input `ctrBranch branchCtr,
     input `ctrALU aluCtr,
 
     input `data dataA,
     input `data dataB,
 
-    input `instructionAddrPath offset,
+    //input `instructionAddrPath offset,
 
-    output `data out
+    output `data aluOut,
+    output logic zero
 );
-    logic zero;
+
 
     ALU alu(
         .ctr(aluCtr),
         .dataA(dataA),
         .dataB(dataB),
-        .out(out),
+        .out(aluOut),
         .zero(zero)
     );
 

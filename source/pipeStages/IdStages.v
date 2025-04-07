@@ -36,7 +36,14 @@ module IdStages(
         .offset(offset)
     );
 
-    //need a controller to determine rs2 and rd which decided by insn[5]
+    Mux #(.LENGTH(`REG_ADDR)) selReg( //determines rs2 or rd which should be regB
+        .in1(rd),
+        .in2(rs2),
+        .sel(insn[5]),
+        .out(regB)
+    );
+
+    //need a controller to determine if stall
 
 
 endmodule

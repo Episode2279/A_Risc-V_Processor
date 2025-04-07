@@ -18,7 +18,11 @@ module IF_IDRegister(
             pc_o<=`RESET_VECTOR;
         end
         else begin
-            if(~stall)begin
+            if(stall)begin //if stall, create a bubble
+                instruction_o<=0;
+                pc_o<=0;
+            end
+            else begin
                 instruction_o<=instruction_if;
                 pc_o<=pc_if;
             end

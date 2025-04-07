@@ -1,6 +1,5 @@
 `include "Types.v"
 module insnMem(
-    input logic clk,
     input `instructionAddrPath addr,
 
     output `instruction instruction_o

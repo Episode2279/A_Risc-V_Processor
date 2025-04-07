@@ -24,7 +24,6 @@ module IfStages(
     );
 
     insnMem insnMem(
-        .clk(clk),
         .addr(pc),
         .instruction_o(insn)
     );
