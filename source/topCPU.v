@@ -2,8 +2,19 @@
 
 module topCPU(
     input logic clk,
-    input logic rst
+    input logic rst,
+
+    output `instruction check,
+    output `instructionAddrPath checkPC,
+    output `data checkData
 );
+
+    //check
+    always@(*)begin
+        check = insn_if;
+        checkPC = pc_if;
+        checkData = data_wb;
+    end
 
     `instructionAddrPath pc_if,pc_id,pc_exe,pc_mem,pc_wb;
     `instructionAddrPath pc_br;

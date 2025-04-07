@@ -13,7 +13,7 @@ module dataMem(
     `dataAddrPath addr;
 
     initial begin
-        $readmemh("utils/data.mem",mem);
+        $readmemb("utils/data.mem",mem);
     end
 
     assign addr = logicAddr[`DATA_ADDR-1:0];//use only lower 14 bits of a word(32 bits) to address the memory space
