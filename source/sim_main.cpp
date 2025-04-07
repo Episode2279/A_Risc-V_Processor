@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
  
-#include "Vtop.h"  // create `top.v`,so use `Vtop.h`
+#include "VtopCPU.h"  // create `top.v`,so use `Vtop.h`
 #include "verilated.h"
  
 #include "verilated_vcd_c.h" //可选，如果要导出vcd则需要加上
@@ -11,7 +11,7 @@ int main(int argc, char** argv, char** env) {
  
   VerilatedContext* contextp = new VerilatedContext;
   contextp->commandArgs(argc, argv);
-  Vtop* top = new Vtop{contextp};
+  VtopCPU* top = new VtopCPU{contextp};
   
  
   VerilatedVcdC* tfp = new VerilatedVcdC; //初始化VCD对象指针

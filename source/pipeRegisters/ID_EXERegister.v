@@ -15,6 +15,8 @@ module ID_EXERegister(
 
     input `data dataA_i,
     input `data dataB_i,
+    input `regAddr regA_i,
+    input `regAddr regB_i,
     input `instructionAddrPath offset_i,
 
     output `instructionAddrPath pc_exe,
@@ -28,6 +30,8 @@ module ID_EXERegister(
 
     output `data dataA_o,
     output `data dataB_o,
+    output `regAddr regA_o,
+    output `regAddr regB_o,
     output `instructionAddrPath offset_o
 
 );
@@ -46,6 +50,9 @@ module ID_EXERegister(
             dataA_o<=`RESET_VECTOR;
             dataB_o<=`RESET_VECTOR;
 
+            regA_o<=`RESET_VECTOR;
+            regB_o<=`RESET_VECTOR;
+
             offset_o<=`RESET_VECTOR;
         end
         else begin
@@ -59,6 +66,9 @@ module ID_EXERegister(
 
             dataA_o<=dataA_i;
             dataB_o<=dataB_i;
+
+            regA_o<=regA_i;
+            regB_o<=regB_i;
 
             offset_o<=offset_i;
         end
