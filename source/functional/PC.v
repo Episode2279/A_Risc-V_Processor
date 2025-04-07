@@ -16,7 +16,7 @@ module PC(
             pc <= `RESET_VECTOR;
         end
         else if(wrEnable) begin
-            else if(jump_enable) begin
+            if(jump_enable) begin
                 pc<= jump_address;
             end
             else begin

@@ -1,6 +1,6 @@
 //true and false
-`define TRUE  1b'1
-`define FALSE 1b'0
+`define TRUE  1'b1
+`define FALSE 1'b0
 //reset value
 `define RESET_VECTOR 0
 //instruction size 4 Bytes * 32 entries = 128 Bytes, need 7 bits to locate the instruction
@@ -28,14 +28,14 @@
 
 //ALU controll signal
 `define ctrALU logic[1:0]
-`define AND 2b'11
-`define OR 2b'10
-`define ADD 2b'00
-`define SUB 2b'01
+`define AND 2'b11
+`define OR 2'b10
+`define ADD 2'b00
+`define SUB 2'b01
 
 //Branch controll signal
 
 `define ctrBranch logic[1:0]
-`define BEQ 00
-`define BLT 10
-`define NO_JUMP 01
+`define BEQ 2'b00
+`define BLT 2'b10
+`define NO_JUMP 2'b01

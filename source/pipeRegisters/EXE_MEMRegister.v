@@ -14,6 +14,7 @@ module EXE_MEMRegister(
 
     input `data dataA_i,
     input `data dataB_i,
+    input `regAddr regB_i,
     //input `instructionAddrPath offset_i,
 
     input `data aluOut_i,
@@ -29,12 +30,13 @@ module EXE_MEMRegister(
 
     output `data dataA_o,
     output `data dataB_o,
+    output `regAddr regB_o,
     //output `instructionAddrPath offset_o,
 
     output `data aluOut_o
 );
 
-    always*(posedge clk or negedge rst)begin
+    always@(posedge clk or negedge rst)begin
         if(~rst)begin
             pc_mem<=0;
             registerWriteEnable_o<=0;

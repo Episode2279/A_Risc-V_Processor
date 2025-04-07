@@ -22,6 +22,8 @@ module BranchCtr(
                     pc_o = pc_i+offset;
                     jumpEnable = `TRUE;
                 end
+                default:jumpEnable = `FALSE;//do nothing
+            endcase
         end
     end
 

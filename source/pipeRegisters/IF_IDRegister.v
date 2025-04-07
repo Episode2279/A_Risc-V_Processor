@@ -12,7 +12,7 @@ module IF_IDRegister(
     output `instructionAddrPath pc_o
 );
 
-    always*(posedge clk or negedge rst)begin
+    always@(posedge clk or negedge rst)begin
         if(~rst)begin
             instruction_o<=`RESET_VECTOR;
             pc_o<=`RESET_VECTOR;

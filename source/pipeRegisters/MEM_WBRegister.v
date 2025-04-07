@@ -13,6 +13,7 @@ module MEM_WBRegister(
 
     input `data aluSrc_i,
     input `data rdData_i,
+    input `regAddr regB_i,
 
     //input `instructionAddrPath offset_i,
 
@@ -27,14 +28,15 @@ module MEM_WBRegister(
     //output `ctrBranch branchCtr_o,
 
     output `data aluSrc_o,
-    output `data rdData_o
+    output `data rdData_o,
+    output `regAddr regB_o
 
     //output `instructionAddrPath offset_o,
 
     //output logic zero_o,
 );
 
-    always*(posedge clk or negedge rst)begin
+    always@(posedge clk or negedge rst)begin
         if(~rst)begin
             pc_wb<=0;
             registerWriteEnable_o<=0;

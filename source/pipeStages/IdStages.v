@@ -36,7 +36,7 @@ module IdStages(
         .offset(offset)
     );
 
-    Mux #(.LENGTH(`REG_ADDR)) selReg( //determines rs2 or rd which should be regB
+    Mux selReg( //determines rs2 or rd which should be regB
         .in1(rd),
         .in2(rs2),
         .sel(insn[5]),

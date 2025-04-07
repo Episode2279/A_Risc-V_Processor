@@ -36,7 +36,7 @@ module ID_EXERegister(
 
 );
 
-    always*(posedge clk or negedge rst)begin
+    always@(posedge clk or negedge rst)begin
         if(~rst)begin
             pc_exe<=`RESET_VECTOR;
 

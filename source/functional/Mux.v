@@ -1,11 +1,11 @@
 `include "Types.v"
-module Mux #(parameter integer LENGTH)(
-    input logic in1[LENGTH-1:0],
-    input logic in2[LENGTH-1:0],
+module Mux (
+    input `regAddr in1,
+    input `regAddr in2,
 
     input logic sel,
 
-    output logic out[LENGTH-1:0]
+    output `regAddr out
 );
 
     assign out=(sel==0)?in1:in2;

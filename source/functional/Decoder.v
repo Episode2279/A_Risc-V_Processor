@@ -20,8 +20,8 @@ module Decoder(
         //addressing
         rs1 = insn[19:15];
         rs2 = insn[24:20];
-        rsd = insn[11:7];
-        offset = insn[11:7];
+        rd = insn[11:7];
+        offset = {insn[26:25],insn[11:7]};
 
         //default controll signal
         regSelect = `FALSE;

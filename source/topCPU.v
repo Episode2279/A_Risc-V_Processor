@@ -2,9 +2,7 @@
 
 module topCPU(
     input logic clk,
-    input logic rst,
-
-
+    input logic rst
 );
 
     `instructionAddrPath pc_if,pc_id,pc_exe,pc_mem,pc_wb;
@@ -20,7 +18,7 @@ module topCPU(
 
     `ctrALU aluCtr_id,aluCtr_exe;
 
-    `regAddr regA_id,regA_exe,regB_id,regB_exe;
+    `regAddr regA_id,regA_exe,regB_id,regB_exe,regB_mem,regB_wb;
 
     `data dataA_id,dataA_exe,dataA_mem;
     `data dataB_id,dataB_exe,dataB_mem;
@@ -47,7 +45,7 @@ module topCPU(
 
         .writeEnable(registerWriteEnable_wb),
         .data_i(data_wb),
-        .wrAddr(regB),
+        .wrAddr(regB_wb),
         .rdAddrA(regA_id),
         .rdAddrB(regB_id),
         //output
@@ -135,8 +133,8 @@ module topCPU(
         .aluCtr_o(aluCtr_exe),
         .dataA_o(dataA_exe),
         .dataB_o(dataB_exe),
-        .regA_i(regA_exe),
-        .regB_i(regB_exe),
+        .regA_o(regA_exe),
+        .regB_o(regB_exe),
         .offset_o(offset_exe)
     );
 
@@ -179,6 +177,7 @@ module topCPU(
         .regSelect_i(regSelect_exe),
         .dataA_i(dataA_exe),
         .dataB_i(dataB_exe),
+        .regB_i(regB_exe),
         .aluOut_i(aluOut_exe),
         //output
         .pc_mem(pc_mem),
@@ -187,6 +186,7 @@ module topCPU(
         .regSelect_o(regSelect_mem),
         .dataA_o(dataA_mem),
         .dataB_o(dataB_mem),
+        .regB_o(regB_mem),
         .aluOut_o(aluOut_mem)
     );
 
@@ -215,12 +215,14 @@ module topCPU(
         .regSelect_i(regSelect_mem),
         .aluSrc_i(aluOut_mem),
         .rdData_i(rdData_mem),
+        .regB_i(regB_mem),
         //output
         .pc_wb(pc_wb),
         .registerWriteEnable_o(registerWriteEnable_wb),
         .regSelect_o(regSelect_wb),
         .aluSrc_o(aluOut_wb),
-        .rdData_o(rdData_wb)
+        .rdData_o(rdData_wb),
+        .regB_o(regB_wb)
     );
 
     //write back stage

@@ -8,7 +8,9 @@ module controller(
     output logic stall
 );
 
-    assign wrEnable = `TRUE;
-    assign stall = `FALSE;
+    always@(*)begin
+        wrEnable = `TRUE;
+        stall = `FALSE;
+    end
 
 endmodule

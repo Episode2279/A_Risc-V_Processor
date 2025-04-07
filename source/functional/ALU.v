@@ -14,10 +14,11 @@ module ALU(
 
     always @(*) begin
         case(ctr)
-            AND:out = dataA & dataB;
-            OR:out = dataA | dataB;
-            SUB:out = dataA - dataB;
-            ADD:out = dataA + dataB;
+            `AND:out = dataA & dataB;
+            `OR:out = dataA | dataB;
+            `SUB:out = dataA - dataB;
+            `ADD:out = dataA + dataB;
+        endcase
     end
 
 endmodule
