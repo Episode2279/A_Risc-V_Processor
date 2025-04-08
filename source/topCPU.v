@@ -56,7 +56,7 @@ module topCPU(
 
         .writeEnable(registerWriteEnable_wb),
         .data_i(data_wb),
-        .wrAddr(regB_wb),
+        .wrAddr(regB_wb),//write back should be the rd!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         .rdAddrA(regA_id),
         .rdAddrB(regB_id),
         //output
