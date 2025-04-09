@@ -29,7 +29,8 @@ module topCPU(
 
     `ctrALU aluCtr_id,aluCtr_exe;
 
-    `regAddr regA_id,regA_exe,regB_id,regB_exe,regB_mem,regB_wb;
+    `regAddr regA_id,regA_exe,regB_id,regB_exe;
+    `regAddr rd_id,rd_exe,rd_mem,rd_wb;
 
     `data dataA_id,dataA_exe,dataA_mem;
     `data dataB_id,dataB_exe,dataB_mem;
@@ -56,7 +57,7 @@ module topCPU(
 
         .writeEnable(registerWriteEnable_wb),
         .data_i(data_wb),
-        .wrAddr(regB_wb),//write back should be the rd!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        .wrAddr(rd_wb),//write back should be the rd111
         .rdAddrA(regA_id),
         .rdAddrB(regB_id),
         //output
@@ -108,6 +109,7 @@ module topCPU(
         .aluCtr(aluCtr_id),
         .regA(regA_id),
         .regB(regB_id),
+        .rd(rd_id),
         .offset(offset_id)
     );
 
@@ -133,7 +135,8 @@ module topCPU(
         .dataA_i(dataA_id),
         .dataB_i(dataB_id),
         .regA_i(regA_id),
-        .regB_i(regB_id),
+        .regB_i(regB_id),//1111
+        .rd_i(rd_id),
         .offset_i(offset_id),
         //output
         .pc_exe(pc_exe),
@@ -145,7 +148,8 @@ module topCPU(
         .dataA_o(dataA_exe),
         .dataB_o(dataB_exe),
         .regA_o(regA_exe),
-        .regB_o(regB_exe),
+        .regB_o(regB_exe),//1111
+        .rd_o(rd_exe),
         .offset_o(offset_exe)
     );
 
@@ -188,7 +192,7 @@ module topCPU(
         .regSelect_i(regSelect_exe),
         .dataA_i(dataA_exe),
         .dataB_i(dataB_exe),
-        .regB_i(regB_exe),
+        .rd_i(rd_exe),
         .aluOut_i(aluOut_exe),
         //output
         .pc_mem(pc_mem),
@@ -197,7 +201,7 @@ module topCPU(
         .regSelect_o(regSelect_mem),
         .dataA_o(dataA_mem),
         .dataB_o(dataB_mem),
-        .regB_o(regB_mem),
+        .rd_o(rd_mem),
         .aluOut_o(aluOut_mem)
     );
 
@@ -226,14 +230,14 @@ module topCPU(
         .regSelect_i(regSelect_mem),
         .aluSrc_i(aluOut_mem),
         .rdData_i(rdData_mem),
-        .regB_i(regB_mem),
+        .rd_i(rd_mem),
         //output
         .pc_wb(pc_wb),
         .registerWriteEnable_o(registerWriteEnable_wb),
         .regSelect_o(regSelect_wb),
         .aluSrc_o(aluOut_wb),
         .rdData_o(rdData_wb),
-        .regB_o(regB_wb)
+        .rd_o(rd_wb)
     );
 
     //write back stage

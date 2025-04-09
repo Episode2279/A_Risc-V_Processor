@@ -14,7 +14,7 @@ module EXE_MEMRegister(
 
     input `data dataA_i,
     input `data dataB_i,
-    input `regAddr regB_i,
+    input `regAddr rd_i,
     //input `instructionAddrPath offset_i,
 
     input `data aluOut_i,
@@ -30,7 +30,7 @@ module EXE_MEMRegister(
 
     output `data dataA_o,
     output `data dataB_o,
-    output `regAddr regB_o,
+    output `regAddr rd_o,
     //output `instructionAddrPath offset_o,
 
     output `data aluOut_o
@@ -45,6 +45,7 @@ module EXE_MEMRegister(
             dataA_o<=0;
             dataB_o<=0;
             aluOut_o<=0;
+            rd_o<=0;
         end
         else begin
             pc_mem<=pc_exe;
@@ -54,6 +55,7 @@ module EXE_MEMRegister(
             dataA_o<=dataA_i;
             dataB_o<=dataB_i;
             aluOut_o<=aluOut_i;
+            rd_o<=rd_i;
         end
     end
 

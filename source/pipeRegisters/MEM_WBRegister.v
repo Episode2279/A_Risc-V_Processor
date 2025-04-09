@@ -13,7 +13,7 @@ module MEM_WBRegister(
 
     input `data aluSrc_i,
     input `data rdData_i,
-    input `regAddr regB_i,
+    input `regAddr rd_i,
 
     //input `instructionAddrPath offset_i,
 
@@ -29,7 +29,7 @@ module MEM_WBRegister(
 
     output `data aluSrc_o,
     output `data rdData_o,
-    output `regAddr regB_o
+    output `regAddr rd_o
 
     //output `instructionAddrPath offset_o,
 
@@ -43,6 +43,7 @@ module MEM_WBRegister(
             regSelect_o<=0;
             aluSrc_o<=0;
             rdData_o<=0;
+            rd_o<=0;
         end
         else begin
             pc_wb<=pc_mem;
@@ -50,6 +51,7 @@ module MEM_WBRegister(
             regSelect_o<=regSelect_i;
             aluSrc_o<=aluSrc_i;
             rdData_o<=rdData_i;
+            rd_o<=rd_i;
         end
     end
 

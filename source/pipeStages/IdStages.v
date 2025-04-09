@@ -16,11 +16,10 @@ module IdStages(
     output `regAddr regA,
     output `regAddr regB,
 
+    output `regAddr rd,
+
     output `instructionAddrPath offset
 );
-
-    `regAddr rs2;
-    `regAddr rd;
 
 
     Decoder decoder(
@@ -31,17 +30,17 @@ module IdStages(
         .branchCtr(branchCtr),
         .aluCtr(aluCtr),
         .rs1(regA),
-        .rs2(rs2),
+        .rs2(regB),
         .rd(rd),
         .offset(offset)
     );
 
-    Mux selReg( //determines rs2 or rd which should be regB
+    /*Mux selReg( //determines rs2 or rd which should be regB
         .in1(rd),
         .in2(rs2),
         .sel(insn[5]),
         .out(regB)
-    );
+    );*/
 
     //need a controller to determine if stall
 
