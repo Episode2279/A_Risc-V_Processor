@@ -17,11 +17,14 @@ module dataMem(
     end
 
     assign addr = logicAddr[`DATA_ADDR-1:0];//use only lower 14 bits of a word(32 bits) to address the memory space
-    assign data_o = {mem[addr],mem[addr+1],mem[addr+2],mem[addr+3]};
+    //assign data_o = {mem[addr],mem[addr+1],mem[addr+2],mem[addr+3]};
 
     always @(posedge clk)begin
         if(writeEnable)begin
             {mem[addr],mem[addr+1],mem[addr+2],mem[addr+3]}<=data_i;
+        end
+        else begin
+            data_o <= {mem[addr],mem[addr+1],mem[addr+2],mem[addr+3]};
         end
     end
 

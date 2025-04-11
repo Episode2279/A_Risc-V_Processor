@@ -57,7 +57,7 @@ module topCPU(
 
         .writeEnable(registerWriteEnable_wb),
         .data_i(data_wb),
-        .wrAddr(rd_wb),//write back should be the rd111
+        .wrAddr(rd_wb),//write back
         .rdAddrA(regA_id),
         .rdAddrB(regB_id),
         //output
@@ -135,7 +135,7 @@ module topCPU(
         .dataA_i(dataA_id),
         .dataB_i(dataB_id),
         .regA_i(regA_id),
-        .regB_i(regB_id),//1111
+        .regB_i(regB_id),
         .rd_i(rd_id),
         .offset_i(offset_id),
         //output
@@ -148,7 +148,7 @@ module topCPU(
         .dataA_o(dataA_exe),
         .dataB_o(dataB_exe),
         .regA_o(regA_exe),
-        .regB_o(regB_exe),//1111
+        .regB_o(regB_exe),
         .rd_o(rd_exe),
         .offset_o(offset_exe)
     );
