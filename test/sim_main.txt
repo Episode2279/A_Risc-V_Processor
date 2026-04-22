@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <assert.h>
  
-#include "Vtop.h"  // create `top.v`,so use `Vtop.h`
+#include "Vtop.h"  // generated from the top module name
 #include "verilated.h"
  
 #include "verilated_vcd_c.h" //可选，如果要导出vcd则需要加上

@@ -4,6 +4,8 @@
 
 ----enter the directory source.
 
-----use"verilator --cc --build --exe --trace -I../source/pipeStages -I../source/functional -I../source/memory -I../source/pipeRegisters topCPU.v sim_main.cpp" to compile it.
+----the HDL has been converted to SystemVerilog and now uses a shared package in `TypesPkg.sv`.
 
-----use"./obj_dir/VtopCPU" to execute it.
+----use `verilator --sv -f filelist.f --cc --build --exe --trace sim_main.cpp` to compile it.
+
+----use `./obj_dir/VtopCPU` to execute it.
