@@ -1,6 +1,8 @@
 module topCPU
     import TypesPkg::*;
 #(
+    // Datapath and storage sizing. These default to the shared package values,
+    // but can be overridden to retarget the core configuration.
     parameter int DATA_W = WORD_SIZE,
     parameter int INSN_W = INS_SIZE,
     parameter int ADDR_W = WORD_SIZE,
@@ -10,6 +12,7 @@ module topCPU
     parameter int INSN_MEM_BYTES = INS_ADDR_SIZE,
     parameter int DATA_MEM_ADDR_W = DATA_ADDR,
     parameter int DATA_MEM_BYTES = DATA_ADDR_SIZE,
+    // Reset and MMIO defaults used by the integrated memories/peripherals.
     parameter logic [DATA_W-1:0] STATE_RESET_VALUE = '0,
     parameter logic [ADDR_W-1:0] RESET_PC = RESET_VECTOR,
     parameter logic [ADDR_W-1:0] PC_INCREMENT = 32'd4,
@@ -136,47 +139,49 @@ module topCPU
         .exe_bus_o(id_exe_bus)
     );
 
-    always_comb begin
-        unique case (exe_mem_bus.wbSelect)
-            WB_ALU: result_mem = exe_mem_bus.aluOut;
-            WB_MEM: result_mem = rdData_mem;
-            WB_PC4: result_mem = exe_mem_bus.pc + PC_INCREMENT;
-            WB_IMM: result_mem = exe_mem_bus.immediate;
-            default: result_mem = '0;
-        endcase
+    // Keep result selection and bypass policy local to dedicated helpers so the
+    // top level focuses on stage connectivity rather than datapath decisions.
+    WritebackMux #(
+        .DATA_W(DATA_W),
+        .ADDR_W(ADDR_W),
+        .PC_INCREMENT(PC_INCREMENT)
+    ) exeResultMux(
+        .wbSelect(exe_mem_bus.wbSelect),
+        .pc(exe_mem_bus.pc),
+        .aluData(exe_mem_bus.aluOut),
+        .memData(rdData_mem),
+        .immediate(exe_mem_bus.immediate),
+        .result_o(result_mem)
+    );
 
-        forwardA_exe = id_exe_bus.dataA;
-        if (exe_mem_bus.registerWriteEnable && (exe_mem_bus.rd != '0) && (exe_mem_bus.rd == id_exe_bus.regA)) begin
-            forwardA_exe = result_mem;
-        end else if (mem_wb_bus.registerWriteEnable && (mem_wb_bus.rd != '0) && (mem_wb_bus.rd == id_exe_bus.regA)) begin
-            forwardA_exe = data_wb;
-        end
+    ForwardingUnit #(
+        .DATA_W(DATA_W),
+        .REG_ADDR_W(REG_ADDR_W),
+        .ZERO_REG('0)
+    ) forwardingUnit(
+        .exe_bus(id_exe_bus),
+        .mem_bus(exe_mem_bus),
+        .wb_bus(mem_wb_bus),
+        .mem_result_i(result_mem),
+        .wb_result_i(data_wb),
+        .dataA_o(forwardA_exe),
+        .dataB_o(forwardB_exe)
+    );
 
-        forwardB_exe = id_exe_bus.dataB;
-        if (exe_mem_bus.registerWriteEnable && (exe_mem_bus.rd != '0) && (exe_mem_bus.rd == id_exe_bus.regB)) begin
-            forwardB_exe = result_mem;
-        end else if (mem_wb_bus.registerWriteEnable && (mem_wb_bus.rd != '0) && (mem_wb_bus.rd == id_exe_bus.regB)) begin
-            forwardB_exe = data_wb;
-        end
+    // These adapters translate stage outputs into the next pipeline register's
+    // bus shape, which keeps field packing out of the top-level wiring.
+    ExeMemPrep exeMemPrep(
+        .exe_bus(id_exe_bus),
+        .storeData_i(forwardB_exe),
+        .aluOut_i(aluOut_exe),
+        .exe_mem_o(exe_mem_in_bus)
+    );
 
-        exe_mem_in_bus.pc = id_exe_bus.pc;
-        exe_mem_in_bus.registerWriteEnable = id_exe_bus.registerWriteEnable;
-        exe_mem_in_bus.dataWriteEnable = id_exe_bus.dataWriteEnable;
-        exe_mem_in_bus.wbSelect = id_exe_bus.wbSelect;
-        exe_mem_in_bus.memCtr = id_exe_bus.memCtr;
-        exe_mem_in_bus.dataB = forwardB_exe;
-        exe_mem_in_bus.rd = id_exe_bus.rd;
-        exe_mem_in_bus.immediate = id_exe_bus.immediate;
-        exe_mem_in_bus.aluOut = aluOut_exe;
-
-        mem_wb_in_bus.pc = exe_mem_bus.pc;
-        mem_wb_in_bus.registerWriteEnable = exe_mem_bus.registerWriteEnable;
-        mem_wb_in_bus.wbSelect = exe_mem_bus.wbSelect;
-        mem_wb_in_bus.immediate = exe_mem_bus.immediate;
-        mem_wb_in_bus.aluSrc = exe_mem_bus.aluOut;
-        mem_wb_in_bus.rdData = rdData_mem;
-        mem_wb_in_bus.rd = exe_mem_bus.rd;
-    end
+    MemWbPrep memWbPrep(
+        .mem_bus(exe_mem_bus),
+        .rdData_i(rdData_mem),
+        .mem_wb_o(mem_wb_in_bus)
+    );
 
     ExeStages #(
         .DATA_W(DATA_W)
@@ -243,6 +248,7 @@ module topCPU
 
     WBStages #(
         .DATA_W(DATA_W),
+        .ADDR_W(ADDR_W),
         .PC_INCREMENT(PC_INCREMENT)
     ) wbStage(
         .wb_bus(mem_wb_bus),

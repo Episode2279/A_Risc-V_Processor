@@ -13,12 +13,16 @@ SECTIONS {
   .text : {
     *(.init)
     *(.text*)
-    *(.rodata*)
   } > IMEM
 
-  /* VMA in DMEM (0x0...), but LMA in DLOAD (0x10000...) */
+  /*
+   * VMA in DMEM (0x0...), but LMA in DLOAD (0x10000...).
+   * Keep .rodata here because the core has separate instruction/data
+   * memories, and C string literals are read through the data port.
+   */
   .data : ALIGN(4) {
     __data_start = .;
+    *(.rodata*)
     *(.data*) *(.sdata*)
     __data_end = .;
   } > DMEM AT > DLOAD

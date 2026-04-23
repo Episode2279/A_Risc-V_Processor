@@ -23,26 +23,121 @@ static inline void uart_putc(char c) {
     mmio_write32(UART_TX_ADDR, (uint32_t)(uint8_t)c);
 }
 
-/* Very small ee_printf:
- * - prints the format string literally
- * - ignores varargs
- * Good enough for bring-up. We can add %d/%x later if you want.
- */
+static void uart_puts(const char *s) {
+    while (*s) {
+        if (*s == '\n') uart_putc('\r');
+        uart_putc(*s++);
+    }
+}
 
-// int ee_printf(const char *fmt, ...) {
-//     mmio_write32(TOHOST_ADDR, 0x22u);
-//     for (;;) {}
-// }
+static void uart_put_unsigned(uint32_t value, uint32_t base, int width, char pad) {
+    char buf[32];
+    int pos = 0;
+
+    if (value == 0) {
+        buf[pos++] = '0';
+    } else {
+        while (value != 0) {
+            uint32_t digit = value % base;
+            buf[pos++] = (digit < 10u) ? (char)('0' + digit) : (char)('a' + digit - 10u);
+            value /= base;
+        }
+    }
+
+    while (pos < width) {
+        uart_putc(pad);
+        width--;
+    }
+
+    while (pos > 0) {
+        uart_putc(buf[--pos]);
+    }
+}
+
+static void uart_put_signed(int32_t value, int width, char pad) {
+    uint32_t magnitude;
+
+    if (value < 0) {
+        uart_putc('-');
+        magnitude = (uint32_t)(-(value + 1)) + 1u;
+    } else {
+        magnitude = (uint32_t)value;
+    }
+
+    uart_put_unsigned(magnitude, 10u, width, pad);
+}
+
+/* Small UART-backed printf for bare-metal simulation output.
+ * Supports the CoreMark formats used by this port: %d, %u, %x, %s, %c,
+ * optional zero padding/width such as %04x, and the ignored 'l' length flag.
+ */
 
 int ee_printf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    va_end(ap);
 
     for (const char *p = fmt; *p; ++p) {
-        if (*p == '\n') uart_putc('\r');
-        uart_putc(*p);
+        int width = 0;
+        char pad = ' ';
+        int long_arg = 0;
+
+        if (*p != '%') {
+            if (*p == '\n') uart_putc('\r');
+            uart_putc(*p);
+            continue;
+        }
+
+        p++;
+        if (*p == '%') {
+            uart_putc('%');
+            continue;
+        }
+
+        if (*p == '0') {
+            pad = '0';
+            p++;
+        }
+
+        while ((*p >= '0') && (*p <= '9')) {
+            width = (width * 10) + (*p - '0');
+            p++;
+        }
+
+        if (*p == 'l') {
+            long_arg = 1;
+            p++;
+        }
+
+        switch (*p) {
+            case 'd':
+            case 'i':
+                uart_put_signed(long_arg ? (int32_t)va_arg(ap, long) : va_arg(ap, int), width, pad);
+                break;
+            case 'u':
+                uart_put_unsigned(long_arg ? (uint32_t)va_arg(ap, unsigned long) : va_arg(ap, unsigned int),
+                                  10u, width, pad);
+                break;
+            case 'x':
+            case 'X':
+                uart_put_unsigned(long_arg ? (uint32_t)va_arg(ap, unsigned long) : va_arg(ap, unsigned int),
+                                  16u, width, pad);
+                break;
+            case 'c':
+                uart_putc((char)va_arg(ap, int));
+                break;
+            case 's': {
+                const char *s = va_arg(ap, const char *);
+                uart_puts(s ? s : "(null)");
+                break;
+            }
+            default:
+                uart_putc('%');
+                if (*p) uart_putc(*p);
+                break;
+        }
     }
+
+    va_end(ap);
     return 0;
 }
 
@@ -69,18 +164,17 @@ ee_s16 get_seed(int i) {
 }
 
 /* ---------------- Timing (dummy) ----------------
- * Since you measure cycles in the testbench, we return 0 ticks.
- * CoreMark will still run+validate; the reported time is meaningless.
+ * Since the hardware currently has no cycle/timer CSR, the benchmark reports a
+ * fixed placeholder duration. Use the testbench cycle count for real timing.
  */
 static CORE_TICKS t0 = 0, t1 = 0;
 
-void start_time(void) { t0 = 0; }
-void stop_time(void)  { t1 = 0; }
+void start_time(void) { t0 = 0; t1 = 0; }
+void stop_time(void)  { t1 = 10; }
 CORE_TICKS get_time(void) { return (CORE_TICKS)(t1 - t0); }
 
 secs_ret time_in_secs(CORE_TICKS ticks) {
-    (void)ticks;
-    return (secs_ret)0;
+    return (secs_ret)ticks;
 }
 
 /* ---------------- Memory allocation ----------------
@@ -124,6 +218,8 @@ void portable_init(core_portable *p, int *argc, char *argv[]) {
     heap_off = 0;
     (void)mmio_read32(FROMHOST_ADDR);
     if (p) p->portable_id = 1;
+    uart_puts("[coremark] UART online, benchmark starting\n");
+    uart_puts("[coremark] Timing is a 10-second placeholder; use TB cycles for real timing\n");
 }
 
 // void portable_init(core_portable *p, int *argc, char *argv[]) {
@@ -140,7 +236,8 @@ void portable_init(core_portable *p, int *argc, char *argv[]) {
 
 void portable_fini(core_portable *p) {
     (void)p;
-    /* End simulation*/
+    uart_puts("[coremark] Benchmark finished, signaling tohost=1\n");
+    /* End simulation */
     mmio_write32(TOHOST_ADDR, 1u);
     for (;;) {}
 }

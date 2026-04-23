@@ -41,13 +41,14 @@ module dataMem
     );
         logic [DATA_W-1:0] shiftedWord;
         begin
-            shiftedWord = rawWord << (offset * 8);
+            // RV32 uses little-endian byte lanes, so offset 0 maps to the low byte.
+            shiftedWord = rawWord >> (offset * 8);
             unique case (accessMode)
-                MEM_BYTE:   format_load = {{24{shiftedWord[31]}}, shiftedWord[31:24]};
-                MEM_HALF:   format_load = {{16{shiftedWord[31]}}, shiftedWord[31:16]};
+                MEM_BYTE:   format_load = {{24{shiftedWord[7]}}, shiftedWord[7:0]};
+                MEM_HALF:   format_load = {{16{shiftedWord[15]}}, shiftedWord[15:0]};
                 MEM_WORD:   format_load = rawWord;
-                MEM_BYTE_U: format_load = {24'd0, shiftedWord[31:24]};
-                MEM_HALF_U: format_load = {16'd0, shiftedWord[31:16]};
+                MEM_BYTE_U: format_load = {24'd0, shiftedWord[7:0]};
+                MEM_HALF_U: format_load = {16'd0, shiftedWord[15:0]};
                 default:    format_load = '0;
             endcase
         end
@@ -65,17 +66,17 @@ module dataMem
             unique case (accessMode)
                 MEM_BYTE: begin
                     unique case (offset)
-                        2'd0: mergedWord[31:24] = writeData[7:0];
-                        2'd1: mergedWord[23:16] = writeData[7:0];
-                        2'd2: mergedWord[15:8]  = writeData[7:0];
-                        2'd3: mergedWord[7:0]   = writeData[7:0];
+                        2'd0: mergedWord[7:0]   = writeData[7:0];
+                        2'd1: mergedWord[15:8]  = writeData[7:0];
+                        2'd2: mergedWord[23:16] = writeData[7:0];
+                        2'd3: mergedWord[31:24] = writeData[7:0];
                     endcase
                 end
                 MEM_HALF: begin
                     unique case (offset)
-                        2'd0: mergedWord[31:16] = writeData[15:0];
+                        2'd0: mergedWord[15:0]  = writeData[15:0];
                         2'd1: mergedWord[23:8]  = writeData[15:0];
-                        2'd2: mergedWord[15:0]  = writeData[15:0];
+                        2'd2: mergedWord[31:16] = writeData[15:0];
                         default: mergedWord = currentWord;
                     endcase
                 end
@@ -90,8 +91,10 @@ module dataMem
 
     assign wordAddr = logicAddr[LOGIC_ADDR_W-1:2];
     assign byteOffset = logicAddr[1:0];
-    // Decode the word-aligned MMIO locations exported by coremark/link.ld.
-    assign uartHit = (logicAddr[DATA_W-1:2] == UART_TX_MMIO_ADDR[DATA_W-1:2]);
+    // UART is byte-oriented: only the base byte address emits a character.
+    // GCC may split volatile word stores into byte stores at +1/+2/+3.
+    assign uartHit = (logicAddr == UART_TX_MMIO_ADDR);
+    // Host registers are word-oriented locations exported by coremark/link.ld.
     assign fromHostHit = (logicAddr[DATA_W-1:2] == FROMHOST_MMIO_ADDR[DATA_W-1:2]);
     assign toHostHit = (logicAddr[DATA_W-1:2] == TOHOST_MMIO_ADDR[DATA_W-1:2]);
     assign toHost_o = toHostReg;

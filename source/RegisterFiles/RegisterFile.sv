@@ -31,7 +31,9 @@ module RegisterFile
         end
     end
 
-    assign rdA = (rdAddrA == ZERO_REG) ? '0 : regMem[rdAddrA];
-    assign rdB = (rdAddrB == ZERO_REG) ? '0 : regMem[rdAddrB];
+    assign rdA = (rdAddrA == ZERO_REG) ? '0 :
+                 ((writeEnable && (wrAddr != ZERO_REG) && (wrAddr == rdAddrA)) ? data_i : regMem[rdAddrA]);
+    assign rdB = (rdAddrB == ZERO_REG) ? '0 :
+                 ((writeEnable && (wrAddr != ZERO_REG) && (wrAddr == rdAddrB)) ? data_i : regMem[rdAddrB]);
 
 endmodule
