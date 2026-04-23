@@ -12,7 +12,7 @@ module CSRFile
 (
     input  logic      clk,
     input  logic      rst,
-    input  logic      retire_i,
+    input  logic [1:0] retireCount_i,
     input  logic      csrValid_i,
     input  csr_op_t   csrOp_i,
     input  csr_addr_t csrAddr_i,
@@ -110,9 +110,10 @@ module CSRFile
             // mcycle/time advance every simulated core cycle. The user-mode
             // cycle/time aliases share this counter for simple bare-metal code.
             mcycle <= mcycle + 64'd1;
-            // minstret increments when a valid instruction reaches writeback.
-            if (retire_i) begin
-                minstret <= minstret + 64'd1;
+            // minstret increments by the number of valid in-order retired
+            // instructions. Dual issue can retire 0, 1, or 2 instructions.
+            if (retireCount_i != 2'd0) begin
+                minstret <= minstret + {62'd0, retireCount_i};
             end
 
             if (csrValid_i && (csrOp_i != CSR_NONE)) begin

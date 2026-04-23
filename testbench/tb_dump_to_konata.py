@@ -178,6 +178,8 @@ class Snapshot:
     stall: int
     flush: int
     jump_enable: int
+    issue0: int
+    issue1: int
     to_host: int
     uart_valid: int
     uart_data: int
@@ -192,7 +194,6 @@ class PipeEntry:
     insn: int
     asm: str
     stage: Optional[str]
-    stage_cycles: int = 0
     flushed: bool = False
 
 
@@ -235,6 +236,8 @@ def load_dump(path: Path) -> List[Snapshot]:
                     stall=parse_int(values["stall"]),
                     flush=parse_int(values["flush"]),
                     jump_enable=parse_int(values["jumpEnable"]),
+                    issue0=parse_int(values.get("issue0", "0")),
+                    issue1=parse_int(values.get("issue1", "0")),
                     to_host=parse_int(values["toHost"]),
                     uart_valid=parse_int(values["uartValid"]),
                     uart_data=parse_int(values["uartData"]),
@@ -244,7 +247,7 @@ def load_dump(path: Path) -> List[Snapshot]:
             if current is None:
                 continue
 
-            if record_type in {"IF", "ID", "EX", "MEM", "WB"}:
+            if record_type.startswith(("IF", "ID", "EX", "MEM", "WB")):
                 parsed_stage: Dict[str, int | str] = {}
                 for key, value in values.items():
                     if value.startswith(("0x", "0X")) or value.isdigit():
@@ -276,46 +279,6 @@ def is_real_insn(insn: int) -> bool:
     return insn != 0
 
 
-def stage_label(entry: PipeEntry) -> str:
-    if entry.stage == "ID":
-        return "ID" if entry.stage_cycles == 0 else str(entry.stage_cycles)
-    return entry.stage or ""
-
-
-def find_by_token(
-    pipeline: List[PipeEntry],
-    token: tuple[int, int],
-    *,
-    stage: Optional[str] = None,
-) -> Optional[PipeEntry]:
-    for entry in pipeline:
-        if entry.stage is None:
-            continue
-        if entry.token != token:
-            continue
-        if stage is not None and entry.stage != stage:
-            continue
-        return entry
-    return None
-
-
-def find_by_pc(
-    pipeline: List[PipeEntry],
-    pc: int,
-    *,
-    stage: Optional[str] = None,
-) -> Optional[PipeEntry]:
-    for entry in pipeline:
-        if entry.stage is None:
-            continue
-        if entry.pc != pc:
-            continue
-        if stage is not None and entry.stage != stage:
-            continue
-        return entry
-    return None
-
-
 def entry_line(entry: PipeEntry) -> str:
     return f"PC=0x{entry.pc:08x} | 0x{entry.insn:08x} | {entry.asm}"
 
@@ -324,190 +287,175 @@ def entry_detail(entry: PipeEntry) -> str:
     return f"(pc=0x{entry.pc:08x}, insn=0x{entry.insn:08x})"
 
 
-def emit_fetch(
-    pipeline: List[PipeEntry],
+VISIBLE_SLOTS = ["IF0", "IF1", "ID0", "ID1", "EX0", "EX1", "MEM0", "MEM1", "WB0", "WB1"]
+TOKEN_SLOTS = {"IF0", "IF1", "ID0", "ID1"}
+
+
+def stage_data(snapshot: Snapshot, stage_name: str) -> Dict[str, int | str]:
+    if stage_name in snapshot.stages:
+        return snapshot.stages[stage_name]
+    legacy_name = stage_name.rstrip("01")
+    if legacy_name in snapshot.stages:
+        return snapshot.stages[legacy_name]
+    return {}
+
+
+def stage_token(snapshot: Snapshot, stage_name: str) -> Optional[tuple[int, int]]:
+    stage = stage_data(snapshot, stage_name)
+    valid = int(stage.get("valid", 0))
+    pc = int(stage.get("pc", 0))
+    insn = int(stage.get("insn", 0))
+    if not valid or not is_real_insn(insn):
+        return None
+    return (pc, insn)
+
+
+def new_entry(
+    token: tuple[int, int],
+    stage_name: str,
     state: Dict[str, object],
-    snapshot: Snapshot,
     cache: Dict[int, str],
-) -> List[str]:
-    out: List[str] = []
-    if_stage = snapshot.stages.get("IF", {})
-    if_valid = int(if_stage.get("valid", 0)) != 0
-    if_pc = int(if_stage.get("pc", 0))
-    if_insn = int(if_stage.get("insn", 0))
-
-    if not if_valid or not is_real_insn(if_insn):
-        state["prev_if_token"] = None
-        return out
-
-    token = (if_pc, if_insn)
-    prev_if_token = state.get("prev_if_token")
-
-    if token != prev_if_token:
-        iid = str(state["next_iid"])
-        state["next_iid"] = int(state["next_iid"]) + 1
-        asm = disasm_cached(if_insn, cache)
-        entry = PipeEntry(
-            iid=iid,
-            token=token,
-            pc=if_pc,
-            insn=if_insn,
-            asm=asm,
-            stage="IF",
-        )
-        pipeline.append(entry)
-        out.append(f"I\t{iid}\t{iid}\t0\n")
-        out.append(f"L\t{iid}\t0\t{entry_line(entry)}\n")
-        out.append(f"L\t{iid}\t1\t{entry_detail(entry)}\n")
-
-    state["prev_if_token"] = token
-    return out
+) -> PipeEntry:
+    pc, insn = token
+    iid = str(state["next_iid"])
+    state["next_iid"] = int(state["next_iid"]) + 1
+    return PipeEntry(
+        iid=iid,
+        token=token,
+        pc=pc,
+        insn=insn,
+        asm=disasm_cached(insn, cache),
+        stage=stage_name,
+    )
 
 
-def mark_flush_candidates(pipeline: List[PipeEntry], snapshot: Snapshot) -> None:
-    if not snapshot.flush:
-        return
-
-    if_stage = snapshot.stages.get("IF", {})
-    id_stage = snapshot.stages.get("ID", {})
-
-    if int(if_stage.get("valid", 0)) and is_real_insn(int(if_stage.get("insn", 0))):
-        token = (int(if_stage["pc"]), int(if_stage["insn"]))
-        entry = find_by_token(pipeline, token, stage="IF")
-        if entry is None:
-            entry = find_by_token(pipeline, token, stage="ID")
-        if entry is not None:
-            entry.flushed = True
-
-    if int(id_stage.get("valid", 0)) and is_real_insn(int(id_stage.get("insn", 0))):
-        token = (int(id_stage["pc"]), int(id_stage["insn"]))
-        entry = find_by_token(pipeline, token, stage="ID")
-        if entry is None:
-            entry = find_by_token(pipeline, token, stage="IF")
-        if entry is not None:
-            entry.flushed = True
+def emit_new_entry(entry: PipeEntry) -> List[str]:
+    return [
+        f"I\t{entry.iid}\t{entry.iid}\t0\n",
+        f"L\t{entry.iid}\t0\t{entry_line(entry)}\n",
+        f"L\t{entry.iid}\t1\t{entry_detail(entry)}\n",
+    ]
 
 
-def ensure_id_visibility(
-    pipeline: List[PipeEntry],
-    state: Dict[str, object],
+def decode_window_after_issue(
+    prev_slots: Dict[str, PipeEntry],
+    prev_snapshot: Snapshot,
+) -> tuple[List[PipeEntry], List[PipeEntry], Optional[PipeEntry], Optional[PipeEntry]]:
+    decode_queue = [prev_slots[name] for name in ("ID0", "ID1") if name in prev_slots]
+    fetch_queue = [prev_slots[name] for name in ("IF0", "IF1") if name in prev_slots]
+
+    ex0_entry: Optional[PipeEntry] = None
+    ex1_entry: Optional[PipeEntry] = None
+
+    if prev_snapshot.flush:
+        return [], [], None, None
+
+    if prev_snapshot.issue0 and decode_queue:
+        ex0_entry = decode_queue.pop(0)
+    if prev_snapshot.issue1 and decode_queue:
+        ex1_entry = decode_queue.pop(0)
+
+    while len(decode_queue) < 2 and fetch_queue:
+        decode_queue.append(fetch_queue.pop(0))
+
+    return decode_queue[:2], fetch_queue[:2], ex0_entry, ex1_entry
+
+
+def build_current_slots(
+    prev_slots: Dict[str, PipeEntry],
+    prev_snapshot: Optional[Snapshot],
     snapshot: Snapshot,
+    state: Dict[str, object],
     cache: Dict[int, str],
-) -> List[str]:
-    """Bootstrap ID-stage instructions if the dump begins mid-pipeline."""
+) -> tuple[Dict[str, PipeEntry], List[str]]:
+    current_slots: Dict[str, PipeEntry] = {}
+    emitted: List[str] = []
 
-    out: List[str] = []
+    # Older pipeline stages are tracked purely by slot progression. This avoids
+    # aliasing loop iterations that reuse the same PC in later stages.
+    if prev_snapshot is not None:
+        if "EX0" in prev_slots:
+            current_slots["MEM0"] = prev_slots["EX0"]
+        if "EX1" in prev_slots:
+            current_slots["MEM1"] = prev_slots["EX1"]
+        if "MEM0" in prev_slots:
+            current_slots["WB0"] = prev_slots["MEM0"]
+        if "MEM1" in prev_slots:
+            current_slots["WB1"] = prev_slots["MEM1"]
 
-    id_stage = snapshot.stages.get("ID", {})
-    if not int(id_stage.get("valid", 0)):
-        return out
+        decode_queue, fetch_queue, ex0_entry, ex1_entry = decode_window_after_issue(prev_slots, prev_snapshot)
+        if ex0_entry is not None:
+            current_slots["EX0"] = ex0_entry
+        if ex1_entry is not None:
+            current_slots["EX1"] = ex1_entry
 
-    id_pc = int(id_stage.get("pc", 0))
-    id_insn = int(id_stage.get("insn", 0))
-    if not is_real_insn(id_insn):
-        return out
+        for slot_name, entry in zip(("ID0", "ID1"), decode_queue):
+            current_slots[slot_name] = entry
+        for slot_name, entry in zip(("IF0", "IF1"), fetch_queue):
+            current_slots[slot_name] = entry
 
-    token = (id_pc, id_insn)
-    if find_by_token(pipeline, token) is None:
-        iid = str(state["next_iid"])
-        state["next_iid"] = int(state["next_iid"]) + 1
-        entry = PipeEntry(
-            iid=iid,
-            token=token,
-            pc=id_pc,
-            insn=id_insn,
-            asm=disasm_cached(id_insn, cache),
-            stage="ID",
-        )
-        pipeline.append(entry)
-        out.append(f"I\t{iid}\t{iid}\t0\n")
-        out.append(f"L\t{iid}\t0\t{entry_line(entry)}\n")
-        out.append(f"L\t{iid}\t1\t{entry_detail(entry)}\n")
+    # Reconcile the token-bearing IF/ID slots with the actual dump. Any slot
+    # that is not explained by carry-over is a newly fetched/visible instruction.
+    for slot_name in ("ID0", "ID1", "IF0", "IF1"):
+        token = stage_token(snapshot, slot_name)
+        assigned = current_slots.get(slot_name)
 
-    return out
-
-
-def advance_pipeline(
-    pipeline: List[PipeEntry],
-    snapshot: Snapshot,
-    state: Dict[str, object],
-) -> List[str]:
-    out: List[str] = []
-
-    id_stage = snapshot.stages.get("ID", {})
-    ex_stage = snapshot.stages.get("EX", {})
-    mem_stage = snapshot.stages.get("MEM", {})
-    wb_stage = snapshot.stages.get("WB", {})
-
-    id_token: Optional[tuple[int, int]] = None
-    if int(id_stage.get("valid", 0)) and is_real_insn(int(id_stage.get("insn", 0))):
-        id_token = (int(id_stage["pc"]), int(id_stage["insn"]))
-
-    ex_pc = int(ex_stage.get("pc", -1))
-    mem_pc = int(mem_stage.get("pc", -1))
-    wb_pc = int(wb_stage.get("pc", -1))
-
-    for entry in pipeline:
-        if entry.stage is None:
+        if token is None:
+            current_slots.pop(slot_name, None)
             continue
 
-        previous_stage = entry.stage
+        if assigned is not None and assigned.token == token:
+            continue
 
-        if previous_stage == "IF":
-            if id_token is not None and entry.token == id_token:
-                out.append(f"S\t{entry.iid}\t0\tID\n")
-                entry.stage = "ID"
-                entry.stage_cycles = 0
-            else:
-                out.append(f"S\t{entry.iid}\t0\tIF\n")
+        entry = new_entry(token, slot_name, state, cache)
+        current_slots[slot_name] = entry
+        emitted.extend(emit_new_entry(entry))
 
-        elif previous_stage == "ID":
-            ex_match = find_by_pc([entry], ex_pc, stage="ID")
-            if ex_match is not None:
-                out.append(f"S\t{entry.iid}\t0\tEX\n")
-                entry.stage = "EX"
-                entry.stage_cycles = 0
-            else:
-                out.append(f"S\t{entry.iid}\t0\t{stage_label(entry)}\n")
-                entry.stage_cycles += 1
+    # For EX/MEM/WB, drop predicted occupants if the current snapshot does not
+    # show the matching PC in that slot. This keeps the converter aligned even
+    # if the trace begins mid-pipeline or after skipped cycles.
+    for slot_name in ("EX0", "EX1", "MEM0", "MEM1", "WB0", "WB1"):
+        entry = current_slots.get(slot_name)
+        if entry is None:
+            continue
+        stage = stage_data(snapshot, slot_name)
+        if int(stage.get("pc", -1)) != entry.pc:
+            current_slots.pop(slot_name, None)
 
-        elif previous_stage == "EX":
-            if mem_pc == entry.pc:
-                out.append(f"S\t{entry.iid}\t0\tMEM\n")
-                entry.stage = "MEM"
-                entry.stage_cycles = 0
-            else:
-                out.append(f"S\t{entry.iid}\t0\tEX\n")
+    return current_slots, emitted
 
-        elif previous_stage == "MEM":
-            if wb_pc == entry.pc:
-                out.append(f"S\t{entry.iid}\t0\tWB\n")
-                entry.stage = "WB"
-                entry.stage_cycles = 0
-            else:
-                out.append(f"S\t{entry.iid}\t0\tMEM\n")
-                entry.stage_cycles += 1
 
-        elif previous_stage == "WB":
-            out.append(f"S\t{entry.iid}\t0\tCM\n")
-            entry.stage = "CM"
-            entry.stage_cycles = 0
+def emit_stage_changes(
+    prev_slots: Dict[str, PipeEntry],
+    prev_snapshot: Optional[Snapshot],
+    current_slots: Dict[str, PipeEntry],
+    state: Dict[str, object],
+) -> List[str]:
+    out: List[str] = []
 
-        elif previous_stage == "CM":
-            out.append(f"S\t{entry.iid}\t0\tCM\n")
+    for slot_name in VISIBLE_SLOTS:
+        entry = current_slots.get(slot_name)
+        if entry is None:
+            continue
+        entry.stage = slot_name
+        out.append(f"S\t{entry.iid}\t0\t{slot_name}\n")
+
+    current_ids = {entry.iid for entry in current_slots.values()}
+    flush_slots = {"IF0", "IF1", "ID0", "ID1"}
+
+    for slot_name in VISIBLE_SLOTS:
+        entry = prev_slots.get(slot_name)
+        if entry is None or entry.iid in current_ids:
+            continue
+
+        out.append(f"S\t{entry.iid}\t0\tCM\n")
+        if prev_snapshot is not None and prev_snapshot.flush and slot_name in flush_slots:
+            out.append(f"R\t{entry.iid}\t0\t1\n")
+        else:
             out.append(f"R\t{entry.iid}\t{state['next_rid']}\t0\n")
             state["next_rid"] = int(state["next_rid"]) + 1
-            entry.stage = None
-            entry.stage_cycles = 0
+        entry.stage = None
 
-        if entry.flushed and entry.stage is not None:
-            out.append(f"S\t{entry.iid}\t0\tCM\n")
-            out.append(f"R\t{entry.iid}\t0\t1\n")
-            entry.stage = None
-            entry.stage_cycles = 0
-            entry.flushed = False
-
-    pipeline[:] = [entry for entry in pipeline if entry.stage is not None]
     return out
 
 
@@ -517,11 +465,11 @@ def convert_dump_to_kanata(input_path: Path, output_path: Path, *, skip_cycles: 
         snapshots = [snapshot for snapshot in snapshots if snapshot.cycle > skip_cycles]
 
     cache: Dict[int, str] = {}
-    pipeline: List[PipeEntry] = []
+    prev_slots: Dict[str, PipeEntry] = {}
+    prev_snapshot: Optional[Snapshot] = None
     state: Dict[str, object] = {
         "next_iid": 1,
         "next_rid": 0,
-        "prev_if_token": None,
         "current_cycle": -1,
     }
     issued = 0
@@ -534,30 +482,27 @@ def convert_dump_to_kanata(input_path: Path, output_path: Path, *, skip_cycles: 
                 out.write(f"C\t{cycle_delta}\n")
             state["current_cycle"] = snapshot.cycle
 
-            emitted = ensure_id_visibility(pipeline, state, snapshot, cache)
+            current_slots, emitted = build_current_slots(prev_slots, prev_snapshot, snapshot, state, cache)
             issued += sum(1 for line in emitted if line.startswith("I\t"))
             for line in emitted:
                 out.write(line)
-
-            emitted = emit_fetch(pipeline, state, snapshot, cache)
-            issued += sum(1 for line in emitted if line.startswith("I\t"))
-            for line in emitted:
-                out.write(line)
-
-            mark_flush_candidates(pipeline, snapshot)
 
             out.write(f"// cycle {snapshot.cycle}\n")
-            for line in advance_pipeline(pipeline, snapshot, state):
+            for line in emit_stage_changes(prev_slots, prev_snapshot, current_slots, state):
                 out.write(line)
             out.write("\n\n")
 
-        if pipeline:
+            prev_slots = current_slots
+            prev_snapshot = snapshot
+
+        if prev_slots:
             out.write("// end-of-trace drain\n")
-            for entry in pipeline:
-                if entry.stage is None:
+            for slot_name in VISIBLE_SLOTS:
+                entry = prev_slots.get(slot_name)
+                if entry is None:
                     continue
                 out.write(f"S\t{entry.iid}\t0\tCM\n")
-                if entry.flushed:
+                if prev_snapshot is not None and prev_snapshot.flush and slot_name in {"IF0", "IF1", "ID0", "ID1"}:
                     out.write(f"R\t{entry.iid}\t0\t1\n")
                 else:
                     out.write(f"R\t{entry.iid}\t{state['next_rid']}\t0\n")

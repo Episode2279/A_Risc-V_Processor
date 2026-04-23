@@ -105,7 +105,7 @@ static void dump_pipeline_snapshot(FILE* dump_file,
 
   fprintf(dump_file,
           "SNAPSHOT cycle=%llu time=%llu rst=%u wrEnable=%u stall=%u flush=%u "
-          "jumpEnable=%u toHost=0x%08x uartValid=%u uartData=0x%02x "
+          "jumpEnable=%u issue0=%u issue1=%u toHost=0x%08x uartValid=%u uartData=0x%02x "
           "checkPC=0x%08x check=0x%08x checkData=0x%08x\n",
           (unsigned long long)cycle_count,
           (unsigned long long)sim_time,
@@ -114,6 +114,8 @@ static void dump_pipeline_snapshot(FILE* dump_file,
           (unsigned)topCPU->dbg_stall,
           (unsigned)topCPU->dbg_flush,
           (unsigned)topCPU->dbg_jumpEnable,
+          (unsigned)topCPU->dbg_issue0,
+          (unsigned)topCPU->dbg_issue1,
           (uint32_t)topCPU->toHost_o,
           (unsigned)topCPU->uartValid_o,
           (uint32_t)topCPU->uartData_o,
@@ -122,12 +124,17 @@ static void dump_pipeline_snapshot(FILE* dump_file,
           (uint32_t)topCPU->checkData);
 
   fprintf(dump_file,
-          "IF valid=%u pc=0x%08x insn=0x%08x\n",
+          "IF0 valid=%u pc=0x%08x insn=0x%08x\n",
           (unsigned)topCPU->dbg_if_valid,
           (uint32_t)topCPU->dbg_if_pc,
           (uint32_t)topCPU->dbg_if_insn);
   fprintf(dump_file,
-          "ID valid=%u pc=0x%08x insn=0x%08x rd=%u regWrite=%u memWrite=%u "
+          "IF1 valid=%u pc=0x%08x insn=0x%08x\n",
+          (unsigned)topCPU->dbg_if1_valid,
+          (uint32_t)topCPU->dbg_if1_pc,
+          (uint32_t)topCPU->dbg_if1_insn);
+  fprintf(dump_file,
+          "ID0 valid=%u pc=0x%08x insn=0x%08x rd=%u regWrite=%u memWrite=%u "
           "branchCtr=%u aluCtr=%u memCtr=%u regA=%u regB=%u imm=0x%08x\n",
           (unsigned)topCPU->dbg_id_valid,
           (uint32_t)topCPU->dbg_id_pc,
@@ -142,7 +149,22 @@ static void dump_pipeline_snapshot(FILE* dump_file,
           (unsigned)topCPU->dbg_id_regB,
           (uint32_t)topCPU->dbg_id_imm);
   fprintf(dump_file,
-          "EX pc=0x%08x rd=%u regWrite=%u memWrite=%u memCtr=%u "
+          "ID1 valid=%u pc=0x%08x insn=0x%08x rd=%u regWrite=%u memWrite=%u "
+          "branchCtr=%u aluCtr=%u memCtr=%u regA=%u regB=%u imm=0x%08x\n",
+          (unsigned)topCPU->dbg_id1_valid,
+          (uint32_t)topCPU->dbg_id1_pc,
+          (uint32_t)topCPU->dbg_id1_insn,
+          (unsigned)topCPU->dbg_id1_rd,
+          (unsigned)topCPU->dbg_id1_regWrite,
+          (unsigned)topCPU->dbg_id1_memWrite,
+          (unsigned)topCPU->dbg_id1_branchCtr,
+          (unsigned)topCPU->dbg_id1_aluCtr,
+          (unsigned)topCPU->dbg_id1_memCtr,
+          (unsigned)topCPU->dbg_id1_regA,
+          (unsigned)topCPU->dbg_id1_regB,
+          (uint32_t)topCPU->dbg_id1_imm);
+  fprintf(dump_file,
+          "EX0 pc=0x%08x rd=%u regWrite=%u memWrite=%u memCtr=%u "
           "aluOut=0x%08x dataA=0x%08x dataB=0x%08x imm=0x%08x\n",
           (uint32_t)topCPU->dbg_ex_pc,
           (unsigned)topCPU->dbg_ex_rd,
@@ -154,7 +176,19 @@ static void dump_pipeline_snapshot(FILE* dump_file,
           (uint32_t)topCPU->dbg_ex_dataB,
           (uint32_t)topCPU->dbg_ex_imm);
   fprintf(dump_file,
-          "MEM pc=0x%08x rd=%u regWrite=%u memWrite=%u memCtr=%u "
+          "EX1 pc=0x%08x rd=%u regWrite=%u memWrite=%u memCtr=%u "
+          "aluOut=0x%08x dataA=0x%08x dataB=0x%08x imm=0x%08x\n",
+          (uint32_t)topCPU->dbg_ex1_pc,
+          (unsigned)topCPU->dbg_ex1_rd,
+          (unsigned)topCPU->dbg_ex1_regWrite,
+          (unsigned)topCPU->dbg_ex1_memWrite,
+          (unsigned)topCPU->dbg_ex1_memCtr,
+          (uint32_t)topCPU->dbg_ex1_aluOut,
+          (uint32_t)topCPU->dbg_ex1_dataA,
+          (uint32_t)topCPU->dbg_ex1_dataB,
+          (uint32_t)topCPU->dbg_ex1_imm);
+  fprintf(dump_file,
+          "MEM0 pc=0x%08x rd=%u regWrite=%u memWrite=%u memCtr=%u "
           "aluOut=0x%08x dataB=0x%08x rdData=0x%08x "
           "toHostHit=%u uartHit=%u fromHostHit=%u\n",
           (uint32_t)topCPU->dbg_mem_pc,
@@ -169,7 +203,22 @@ static void dump_pipeline_snapshot(FILE* dump_file,
           (unsigned)topCPU->dbg_mem_uartHit,
           (unsigned)topCPU->dbg_mem_fromHostHit);
   fprintf(dump_file,
-          "WB pc=0x%08x rd=%u regWrite=%u wbSelect=%u aluSrc=0x%08x "
+          "MEM1 pc=0x%08x rd=%u regWrite=%u memWrite=%u memCtr=%u "
+          "aluOut=0x%08x dataB=0x%08x rdData=0x%08x "
+          "toHostHit=%u uartHit=%u fromHostHit=%u\n",
+          (uint32_t)topCPU->dbg_mem1_pc,
+          (unsigned)topCPU->dbg_mem1_rd,
+          (unsigned)topCPU->dbg_mem1_regWrite,
+          (unsigned)topCPU->dbg_mem1_memWrite,
+          (unsigned)topCPU->dbg_mem1_memCtr,
+          (uint32_t)topCPU->dbg_mem1_aluOut,
+          (uint32_t)topCPU->dbg_mem1_dataB,
+          (uint32_t)topCPU->dbg_mem1_rdData,
+          0U,
+          0U,
+          0U);
+  fprintf(dump_file,
+          "WB0 pc=0x%08x rd=%u regWrite=%u wbSelect=%u aluSrc=0x%08x "
           "rdData=0x%08x dataWb=0x%08x\n",
           (uint32_t)topCPU->dbg_wb_pc,
           (unsigned)topCPU->dbg_wb_rd,
@@ -178,6 +227,16 @@ static void dump_pipeline_snapshot(FILE* dump_file,
           (uint32_t)topCPU->dbg_wb_aluSrc,
           (uint32_t)topCPU->dbg_wb_rdData,
           (uint32_t)topCPU->dbg_wb_dataWb);
+  fprintf(dump_file,
+          "WB1 pc=0x%08x rd=%u regWrite=%u wbSelect=%u aluSrc=0x%08x "
+          "rdData=0x%08x dataWb=0x%08x\n",
+          (uint32_t)topCPU->dbg_wb1_pc,
+          (unsigned)topCPU->dbg_wb1_rd,
+          (unsigned)topCPU->dbg_wb1_regWrite,
+          (unsigned)topCPU->dbg_wb1_wbSelect,
+          (uint32_t)topCPU->dbg_wb1_aluSrc,
+          (uint32_t)topCPU->dbg_wb1_rdData,
+          (uint32_t)topCPU->dbg_wb1_dataWb);
 
   if (topCPU->uartValid_o && topCPU->uartData_o != '\r') {
     fprintf(dump_file,
@@ -271,6 +330,12 @@ int main(int argc, char** argv) {
     eval_cycle(topCPU, contextp, tfp);
   }
   topCPU->rst = 1;
+  // Snapshot the reset-release state before the first post-reset cycle shifts
+  // the initial fetch pair into decode. This gives Konata a real IF stage for
+  // the first two dynamic instructions.
+  topCPU->eval();
+  dump_trace(contextp, tfp);
+  dump_pipeline_snapshot(pipe_dump_file, topCPU, 0, contextp->time());
 
   uint64_t cycle_count = 0;
   uint32_t tohost = 0;

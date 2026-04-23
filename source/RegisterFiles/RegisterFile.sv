@@ -11,19 +11,46 @@ module RegisterFile
     parameter logic [REG_ADDR_W-1:0] ZERO_REG = '0
 )
 (
-    // One synchronous write port and two combinational read ports.
+    // Two synchronous write ports and four combinational read ports for the
+    // conservative two-issue pipeline. The original A/B read names are kept for
+    // slot0, while C/D serve slot1.
     input  logic                  clk,
     input  logic                  rst,
     input  logic                  writeEnable,
     input  logic [DATA_W-1:0]     data_i,
     input  logic [REG_ADDR_W-1:0] wrAddr,
+    input  logic                  writeEnableB,
+    input  logic [DATA_W-1:0]     dataB_i,
+    input  logic [REG_ADDR_W-1:0] wrAddrB,
     input  logic [REG_ADDR_W-1:0] rdAddrA,
     input  logic [REG_ADDR_W-1:0] rdAddrB,
+    input  logic [REG_ADDR_W-1:0] rdAddrC,
+    input  logic [REG_ADDR_W-1:0] rdAddrD,
     output logic [DATA_W-1:0]     rdA,
-    output logic [DATA_W-1:0]     rdB
+    output logic [DATA_W-1:0]     rdB,
+    output logic [DATA_W-1:0]     rdC,
+    output logic [DATA_W-1:0]     rdD
 );
 
     logic [DATA_W-1:0] regMem [0:REG_COUNT-1];
+
+    function automatic logic [DATA_W-1:0] read_with_bypass(
+        input logic [REG_ADDR_W-1:0] rdAddr
+    );
+        begin
+            if (rdAddr == ZERO_REG) begin
+                read_with_bypass = '0;
+            end else if (writeEnableB && (wrAddrB != ZERO_REG) && (wrAddrB == rdAddr)) begin
+                // Slot1 is younger than slot0, so it wins same-cycle WAW/read
+                // bypass priority when both write the same destination.
+                read_with_bypass = dataB_i;
+            end else if (writeEnable && (wrAddr != ZERO_REG) && (wrAddr == rdAddr)) begin
+                read_with_bypass = data_i;
+            end else begin
+                read_with_bypass = regMem[rdAddr];
+            end
+        end
+    endfunction
 
     always_ff @(posedge clk or negedge rst) begin
         if (~rst) begin
@@ -36,13 +63,17 @@ module RegisterFile
             // Keep x0 hardwired to zero by suppressing writes to ZERO_REG.
             regMem[wrAddr] <= data_i;
         end
+
+        if (rst && writeEnableB && (wrAddrB != ZERO_REG)) begin
+            regMem[wrAddrB] <= dataB_i;
+        end
     end
 
     // Same-cycle write-first bypass lets decode see a value being written back
     // without waiting an extra cycle.
-    assign rdA = (rdAddrA == ZERO_REG) ? '0 :
-                 ((writeEnable && (wrAddr != ZERO_REG) && (wrAddr == rdAddrA)) ? data_i : regMem[rdAddrA]);
-    assign rdB = (rdAddrB == ZERO_REG) ? '0 :
-                 ((writeEnable && (wrAddr != ZERO_REG) && (wrAddr == rdAddrB)) ? data_i : regMem[rdAddrB]);
+    assign rdA = read_with_bypass(rdAddrA);
+    assign rdB = read_with_bypass(rdAddrB);
+    assign rdC = read_with_bypass(rdAddrC);
+    assign rdD = read_with_bypass(rdAddrD);
 
 endmodule

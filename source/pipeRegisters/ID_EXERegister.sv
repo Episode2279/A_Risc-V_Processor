@@ -11,12 +11,13 @@ module ID_EXERegister
     input logic               rst,
     input logic               stall,
     input logic               flush,
+    input logic               issueEnable,
     IdExeBusIf.register_in    id_bus_i,
     IdExeBusIf.register_out   exe_bus_o
 );
 
     always_ff @(posedge clk or negedge rst) begin
-        if (~rst || flush || stall) begin
+        if (~rst || flush || stall || !issueEnable) begin
             // Reset, branch flush, and load-use stall all inject an execute
             // bubble by clearing every side-effecting control signal.
             exe_bus_o.pc <= RESET_PC;

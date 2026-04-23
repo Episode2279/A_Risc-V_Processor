@@ -61,9 +61,14 @@ module topCPU_tb #(
         .dbg_stall(),
         .dbg_flush(),
         .dbg_jumpEnable(),
+        .dbg_issue0(),
+        .dbg_issue1(),
         .dbg_if_valid(),
         .dbg_if_pc(),
         .dbg_if_insn(),
+        .dbg_if1_valid(),
+        .dbg_if1_pc(),
+        .dbg_if1_insn(),
         .dbg_id_valid(),
         .dbg_id_pc(),
         .dbg_id_insn(),
@@ -76,6 +81,18 @@ module topCPU_tb #(
         .dbg_id_regA(),
         .dbg_id_regB(),
         .dbg_id_imm(),
+        .dbg_id1_valid(),
+        .dbg_id1_pc(),
+        .dbg_id1_insn(),
+        .dbg_id1_rd(),
+        .dbg_id1_regWrite(),
+        .dbg_id1_memWrite(),
+        .dbg_id1_branchCtr(),
+        .dbg_id1_aluCtr(),
+        .dbg_id1_memCtr(),
+        .dbg_id1_regA(),
+        .dbg_id1_regB(),
+        .dbg_id1_imm(),
         .dbg_ex_pc(),
         .dbg_ex_rd(),
         .dbg_ex_regWrite(),
@@ -85,6 +102,15 @@ module topCPU_tb #(
         .dbg_ex_dataA(),
         .dbg_ex_dataB(),
         .dbg_ex_imm(),
+        .dbg_ex1_pc(),
+        .dbg_ex1_rd(),
+        .dbg_ex1_regWrite(),
+        .dbg_ex1_memWrite(),
+        .dbg_ex1_memCtr(),
+        .dbg_ex1_aluOut(),
+        .dbg_ex1_dataA(),
+        .dbg_ex1_dataB(),
+        .dbg_ex1_imm(),
         .dbg_mem_pc(),
         .dbg_mem_rd(),
         .dbg_mem_regWrite(),
@@ -96,13 +122,28 @@ module topCPU_tb #(
         .dbg_mem_toHostHit(),
         .dbg_mem_uartHit(),
         .dbg_mem_fromHostHit(),
+        .dbg_mem1_pc(),
+        .dbg_mem1_rd(),
+        .dbg_mem1_regWrite(),
+        .dbg_mem1_memWrite(),
+        .dbg_mem1_memCtr(),
+        .dbg_mem1_aluOut(),
+        .dbg_mem1_dataB(),
+        .dbg_mem1_rdData(),
         .dbg_wb_pc(),
         .dbg_wb_rd(),
         .dbg_wb_regWrite(),
         .dbg_wb_wbSelect(),
         .dbg_wb_aluSrc(),
         .dbg_wb_rdData(),
-        .dbg_wb_dataWb()
+        .dbg_wb_dataWb(),
+        .dbg_wb1_pc(),
+        .dbg_wb1_rd(),
+        .dbg_wb1_regWrite(),
+        .dbg_wb1_wbSelect(),
+        .dbg_wb1_aluSrc(),
+        .dbg_wb1_rdData(),
+        .dbg_wb1_dataWb()
 `endif
     );
 
@@ -143,7 +184,8 @@ module topCPU_tb #(
                 $fclose(fd);
                 if (label == "instruction") begin
                     // Memories store one 32-bit hex word per line.
-                    $readmemh(candidate_path, dut.ifStage.insnMem.mem);
+                    $readmemh(candidate_path, dut.ifStage.insnMem0.mem);
+                    $readmemh(candidate_path, dut.ifStage.insnMem1.mem);
                 end else begin
                     $readmemh(candidate_path, dut.memStage.dataMem.mem);
                 end
@@ -319,33 +361,57 @@ module topCPU_tb #(
             id_valid = insn_known(dut.if_decode_bus.insn);
 
             $fdisplay(dump_fd,
-                      "SNAPSHOT cycle=%0d time=%0t rst=%0d wrEnable=%0d stall=%0d flush=%0d jumpEnable=%0d toHost=0x%08h uartValid=%0d uartData=0x%02h checkPC=0x%08h check=0x%08h checkData=0x%08h",
+                      "SNAPSHOT cycle=%0d time=%0t rst=%0d wrEnable=%0d stall=%0d flush=%0d jumpEnable=%0d issue0=%0d issue1=%0d toHost=0x%08h uartValid=%0d uartData=0x%02h checkPC=0x%08h check=0x%08h checkData=0x%08h",
                       cycle_count, $time, rst, dut.wrEnable, dut.stall, dut.flush, dut.jumpEnable,
+                      dut.issue0, dut.issue1,
                       toHost, uartValid, uartData, checkPC, check, checkData);
             $fdisplay(dump_fd,
-                      "IF valid=%0d pc=0x%08h insn=0x%08h",
+                      "IF0 valid=%0d pc=0x%08h insn=0x%08h",
                       if_valid, dut.if_fetch_bus.pc, dut.if_fetch_bus.insn);
             $fdisplay(dump_fd,
-                      "ID valid=%0d pc=0x%08h insn=0x%08h rd=%0d regWrite=%0d memWrite=%0d branchCtr=%0d aluCtr=%0d memCtr=%0d regA=%0d regB=%0d imm=0x%08h",
+                      "IF1 valid=%0d pc=0x%08h insn=0x%08h",
+                      insn_known(dut.if_fetch_bus1.insn), dut.if_fetch_bus1.pc, dut.if_fetch_bus1.insn);
+            $fdisplay(dump_fd,
+                      "ID0 valid=%0d pc=0x%08h insn=0x%08h rd=%0d regWrite=%0d memWrite=%0d branchCtr=%0d aluCtr=%0d memCtr=%0d regA=%0d regB=%0d imm=0x%08h",
                       id_valid, dut.if_decode_bus.pc, dut.if_decode_bus.insn, dut.id_exe_in_bus.rd,
                       dut.id_exe_in_bus.registerWriteEnable, dut.id_exe_in_bus.dataWriteEnable,
                       dut.id_exe_in_bus.branchCtr, dut.id_exe_in_bus.aluCtr, dut.id_exe_in_bus.memCtr,
                       dut.id_exe_in_bus.regA, dut.id_exe_in_bus.regB, dut.id_exe_in_bus.immediate);
             $fdisplay(dump_fd,
-                      "EX pc=0x%08h rd=%0d regWrite=%0d memWrite=%0d memCtr=%0d aluOut=0x%08h dataA=0x%08h dataB=0x%08h imm=0x%08h",
+                      "ID1 valid=%0d pc=0x%08h insn=0x%08h rd=%0d regWrite=%0d memWrite=%0d branchCtr=%0d aluCtr=%0d memCtr=%0d regA=%0d regB=%0d imm=0x%08h",
+                      insn_known(dut.if_decode_bus1.insn), dut.if_decode_bus1.pc, dut.if_decode_bus1.insn, dut.id_exe1_in_bus.rd,
+                      dut.id_exe1_in_bus.registerWriteEnable, dut.id_exe1_in_bus.dataWriteEnable,
+                      dut.id_exe1_in_bus.branchCtr, dut.id_exe1_in_bus.aluCtr, dut.id_exe1_in_bus.memCtr,
+                      dut.id_exe1_in_bus.regA, dut.id_exe1_in_bus.regB, dut.id_exe1_in_bus.immediate);
+            $fdisplay(dump_fd,
+                      "EX0 pc=0x%08h rd=%0d regWrite=%0d memWrite=%0d memCtr=%0d aluOut=0x%08h dataA=0x%08h dataB=0x%08h imm=0x%08h",
                       dut.id_exe_bus.pc, dut.id_exe_bus.rd, dut.id_exe_bus.registerWriteEnable,
                       dut.id_exe_bus.dataWriteEnable, dut.id_exe_bus.memCtr, dut.aluOut_exe,
                       dut.forwardA_exe, dut.forwardB_exe, dut.id_exe_bus.immediate);
             $fdisplay(dump_fd,
-                      "MEM pc=0x%08h rd=%0d regWrite=%0d memWrite=%0d memCtr=%0d aluOut=0x%08h dataB=0x%08h rdData=0x%08h toHostHit=%0d uartHit=%0d fromHostHit=%0d",
+                      "EX1 pc=0x%08h rd=%0d regWrite=%0d memWrite=%0d memCtr=%0d aluOut=0x%08h dataA=0x%08h dataB=0x%08h imm=0x%08h",
+                      dut.id_exe1_bus.pc, dut.id_exe1_bus.rd, dut.id_exe1_bus.registerWriteEnable,
+                      dut.id_exe1_bus.dataWriteEnable, dut.id_exe1_bus.memCtr, dut.aluOut1_exe,
+                      dut.forwardA1_exe, dut.forwardB1_exe, dut.id_exe1_bus.immediate);
+            $fdisplay(dump_fd,
+                      "MEM0 pc=0x%08h rd=%0d regWrite=%0d memWrite=%0d memCtr=%0d aluOut=0x%08h dataB=0x%08h rdData=0x%08h toHostHit=%0d uartHit=%0d fromHostHit=%0d",
                       dut.exe_mem_bus.pc, dut.exe_mem_bus.rd, dut.exe_mem_bus.registerWriteEnable,
                       dut.exe_mem_bus.dataWriteEnable, dut.exe_mem_bus.memCtr, dut.exe_mem_bus.aluOut,
                       dut.exe_mem_bus.dataB, dut.rdData_mem, dut.memStage.dataMem.toHostHit,
                       dut.memStage.dataMem.uartHit, dut.memStage.dataMem.fromHostHit);
             $fdisplay(dump_fd,
-                      "WB pc=0x%08h rd=%0d regWrite=%0d wbSelect=%0d aluSrc=0x%08h rdData=0x%08h dataWb=0x%08h",
+                      "MEM1 pc=0x%08h rd=%0d regWrite=%0d memWrite=%0d memCtr=%0d aluOut=0x%08h dataB=0x%08h rdData=0x%08h toHostHit=%0d uartHit=%0d fromHostHit=%0d",
+                      dut.exe_mem1_bus.pc, dut.exe_mem1_bus.rd, dut.exe_mem1_bus.registerWriteEnable,
+                      dut.exe_mem1_bus.dataWriteEnable, dut.exe_mem1_bus.memCtr, dut.exe_mem1_bus.aluOut,
+                      dut.exe_mem1_bus.dataB, dut.rdData1_mem, 1'b0, 1'b0, 1'b0);
+            $fdisplay(dump_fd,
+                      "WB0 pc=0x%08h rd=%0d regWrite=%0d wbSelect=%0d aluSrc=0x%08h rdData=0x%08h dataWb=0x%08h",
                       dut.mem_wb_bus.pc, dut.mem_wb_bus.rd, dut.mem_wb_bus.registerWriteEnable,
                       dut.mem_wb_bus.wbSelect, dut.mem_wb_bus.aluSrc, dut.mem_wb_bus.rdData, dut.data_wb);
+            $fdisplay(dump_fd,
+                      "WB1 pc=0x%08h rd=%0d regWrite=%0d wbSelect=%0d aluSrc=0x%08h rdData=0x%08h dataWb=0x%08h",
+                      dut.mem_wb1_bus.pc, dut.mem_wb1_bus.rd, dut.mem_wb1_bus.registerWriteEnable,
+                      dut.mem_wb1_bus.wbSelect, dut.mem_wb1_bus.aluSrc, dut.mem_wb1_bus.rdData, dut.data1_wb);
             if (uartValid && (uartData != 8'h0d)) begin
                 // UART and tohost are emitted as explicit events so the trace
                 // viewer can annotate key software-visible moments.
@@ -375,6 +441,10 @@ module topCPU_tb #(
 
         repeat (2) @(posedge clk);
         rst = 1'b1;
+        // Capture the freshly released reset state before the first post-reset
+        // clock edge advances the initial fetch pair into decode.
+        #1ns;
+        dump_cycle_snapshot();
 
         $fdisplay(log_fd, " time | cycle |   pc   | instruction | checkData");
         $fdisplay(log_fd, "------+-------+--------+-------------+----------");
