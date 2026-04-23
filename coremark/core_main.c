@@ -134,8 +134,8 @@ main(int argc, char *argv[])
     results[0].seed1      = get_seed(1);
     results[0].seed2      = get_seed(2);
     results[0].seed3      = get_seed(3);
-    //results[0].iterations = get_seed_32(4);
-    results[0].iterations = 1;
+    results[0].iterations = get_seed_32(4);
+    //results[0].iterations = 10;
 #if CORE_DEBUG
     results[0].iterations = 1;
 #endif

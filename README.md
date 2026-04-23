@@ -152,6 +152,10 @@ Key source directories:
 
 ## Notes
 
-CoreMark timing is currently a simulation placeholder because this CPU does not
-yet expose a real cycle counter CSR to software. Use the Verilator/testbench
-cycle count for real performance measurements.
+CoreMark now reads the architectural `cycle/mcycle` CSR for timing. The
+reported `Total ticks` value is the real core-cycle delta seen by software.
+
+`Total time (secs)` is derived from `CORE_CLOCK_HZ` in
+`coremark/core_portme.h`, which defaults to `100_000_000` to match the current
+10 ns simulation clock period. If you change the simulated/synthesized clock,
+update that constant so CoreMark's seconds conversion stays consistent.

@@ -26,7 +26,7 @@ RISCV_OBJCOPY ?= $(RISCV_PREFIX)objcopy
 RISCV_SIZE ?= $(RISCV_PREFIX)size
 PYTHON ?= python3
 
-COREMARK_CFLAGS ?= -march=rv32i -mabi=ilp32 -O2 -ffreestanding -nostdlib -I.
+COREMARK_CFLAGS ?= -march=rv32i_zicsr -mabi=ilp32 -O2 -ffreestanding -nostdlib -I.
 COREMARK_LDFLAGS ?= -Wl,-T,link.ld -Wl,-Map,coremark.map -lgcc
 COREMARK_SRCS := core_main.c core_list_join.c core_matrix.c core_state.c core_util.c core_portme.c start.s
 
