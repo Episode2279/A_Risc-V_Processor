@@ -30,6 +30,58 @@ module topCPU
     output logic [INSN_W-1:0] check,
     output logic [ADDR_W-1:0] checkPC,
     output logic [DATA_W-1:0] checkData
+
+`ifdef VERILATOR
+    ,
+    // Simulation debug ports mirror the Vivado testbench pipeline dump schema.
+    // They keep the Verilator harness independent from generated hierarchy names.
+    output logic              dbg_wrEnable,
+    output logic              dbg_stall,
+    output logic              dbg_flush,
+    output logic              dbg_jumpEnable,
+    output logic              dbg_if_valid,
+    output logic [ADDR_W-1:0] dbg_if_pc,
+    output logic [INSN_W-1:0] dbg_if_insn,
+    output logic              dbg_id_valid,
+    output logic [ADDR_W-1:0] dbg_id_pc,
+    output logic [INSN_W-1:0] dbg_id_insn,
+    output logic [REG_ADDR_W-1:0] dbg_id_rd,
+    output logic              dbg_id_regWrite,
+    output logic              dbg_id_memWrite,
+    output logic [3:0]        dbg_id_branchCtr,
+    output logic [3:0]        dbg_id_aluCtr,
+    output logic [2:0]        dbg_id_memCtr,
+    output logic [REG_ADDR_W-1:0] dbg_id_regA,
+    output logic [REG_ADDR_W-1:0] dbg_id_regB,
+    output logic [ADDR_W-1:0] dbg_id_imm,
+    output logic [ADDR_W-1:0] dbg_ex_pc,
+    output logic [REG_ADDR_W-1:0] dbg_ex_rd,
+    output logic              dbg_ex_regWrite,
+    output logic              dbg_ex_memWrite,
+    output logic [2:0]        dbg_ex_memCtr,
+    output logic [DATA_W-1:0] dbg_ex_aluOut,
+    output logic [DATA_W-1:0] dbg_ex_dataA,
+    output logic [DATA_W-1:0] dbg_ex_dataB,
+    output logic [ADDR_W-1:0] dbg_ex_imm,
+    output logic [ADDR_W-1:0] dbg_mem_pc,
+    output logic [REG_ADDR_W-1:0] dbg_mem_rd,
+    output logic              dbg_mem_regWrite,
+    output logic              dbg_mem_memWrite,
+    output logic [2:0]        dbg_mem_memCtr,
+    output logic [DATA_W-1:0] dbg_mem_aluOut,
+    output logic [DATA_W-1:0] dbg_mem_dataB,
+    output logic [DATA_W-1:0] dbg_mem_rdData,
+    output logic              dbg_mem_toHostHit,
+    output logic              dbg_mem_uartHit,
+    output logic              dbg_mem_fromHostHit,
+    output logic [ADDR_W-1:0] dbg_wb_pc,
+    output logic [REG_ADDR_W-1:0] dbg_wb_rd,
+    output logic              dbg_wb_regWrite,
+    output logic [2:0]        dbg_wb_wbSelect,
+    output logic [DATA_W-1:0] dbg_wb_aluSrc,
+    output logic [DATA_W-1:0] dbg_wb_rdData,
+    output logic [DATA_W-1:0] dbg_wb_dataWb
+`endif
 );
 
     logic [ADDR_W-1:0] pc_br;
@@ -37,6 +89,8 @@ module topCPU
     logic [DATA_W-1:0] regDataA_id, regDataB_id;
     logic [DATA_W-1:0] forwardA_exe, forwardB_exe;
     logic [DATA_W-1:0] aluOut_exe;
+    logic [DATA_W-1:0] csrData_exe;
+    logic [DATA_W-1:0] csrWriteData_exe;
     logic [DATA_W-1:0] rdData_mem;
     logic [DATA_W-1:0] data_wb;
     logic [DATA_W-1:0] result_mem;
@@ -48,6 +102,10 @@ module topCPU
     logic wrEnable;
     logic stall;
     logic flush;
+    logic csrValid_exe;
+    logic memToHostHit;
+    logic memUartHit;
+    logic memFromHostHit;
 
     InstructionPacketIf if_fetch_bus();
     InstructionPacketIf if_decode_bus();
@@ -64,6 +122,57 @@ module topCPU
     assign flush = jumpEnable;
     assign id_exe_in_bus.dataA = regDataA_id;
     assign id_exe_in_bus.dataB = regDataB_id;
+    assign csrWriteData_exe = id_exe_bus.csrUseImm ? id_exe_bus.csrImm : forwardA_exe;
+    assign csrValid_exe = id_exe_bus.valid && (id_exe_bus.wbSelect == WB_CSR);
+
+`ifdef VERILATOR
+    assign dbg_wrEnable = wrEnable;
+    assign dbg_stall = stall;
+    assign dbg_flush = flush;
+    assign dbg_jumpEnable = jumpEnable;
+    assign dbg_if_valid = (if_fetch_bus.insn != '0);
+    assign dbg_if_pc = if_fetch_bus.pc;
+    assign dbg_if_insn = if_fetch_bus.insn;
+    assign dbg_id_valid = id_exe_in_bus.valid;
+    assign dbg_id_pc = if_decode_bus.pc;
+    assign dbg_id_insn = if_decode_bus.insn;
+    assign dbg_id_rd = id_exe_in_bus.rd;
+    assign dbg_id_regWrite = id_exe_in_bus.registerWriteEnable;
+    assign dbg_id_memWrite = id_exe_in_bus.dataWriteEnable;
+    assign dbg_id_branchCtr = id_exe_in_bus.branchCtr;
+    assign dbg_id_aluCtr = id_exe_in_bus.aluCtr;
+    assign dbg_id_memCtr = id_exe_in_bus.memCtr;
+    assign dbg_id_regA = id_exe_in_bus.regA;
+    assign dbg_id_regB = id_exe_in_bus.regB;
+    assign dbg_id_imm = id_exe_in_bus.immediate;
+    assign dbg_ex_pc = id_exe_bus.pc;
+    assign dbg_ex_rd = id_exe_bus.rd;
+    assign dbg_ex_regWrite = id_exe_bus.registerWriteEnable;
+    assign dbg_ex_memWrite = id_exe_bus.dataWriteEnable;
+    assign dbg_ex_memCtr = id_exe_bus.memCtr;
+    assign dbg_ex_aluOut = aluOut_exe;
+    assign dbg_ex_dataA = forwardA_exe;
+    assign dbg_ex_dataB = forwardB_exe;
+    assign dbg_ex_imm = id_exe_bus.immediate;
+    assign dbg_mem_pc = exe_mem_bus.pc;
+    assign dbg_mem_rd = exe_mem_bus.rd;
+    assign dbg_mem_regWrite = exe_mem_bus.registerWriteEnable;
+    assign dbg_mem_memWrite = exe_mem_bus.dataWriteEnable;
+    assign dbg_mem_memCtr = exe_mem_bus.memCtr;
+    assign dbg_mem_aluOut = exe_mem_bus.aluOut;
+    assign dbg_mem_dataB = exe_mem_bus.dataB;
+    assign dbg_mem_rdData = rdData_mem;
+    assign dbg_mem_toHostHit = memToHostHit;
+    assign dbg_mem_uartHit = memUartHit;
+    assign dbg_mem_fromHostHit = memFromHostHit;
+    assign dbg_wb_pc = mem_wb_bus.pc;
+    assign dbg_wb_rd = mem_wb_bus.rd;
+    assign dbg_wb_regWrite = mem_wb_bus.registerWriteEnable;
+    assign dbg_wb_wbSelect = mem_wb_bus.wbSelect;
+    assign dbg_wb_aluSrc = mem_wb_bus.aluSrc;
+    assign dbg_wb_rdData = mem_wb_bus.rdData;
+    assign dbg_wb_dataWb = data_wb;
+`endif
 
     RegisterFile #(
         .DATA_W(DATA_W),
@@ -151,6 +260,7 @@ module topCPU
         .aluData(exe_mem_bus.aluOut),
         .memData(rdData_mem),
         .immediate(exe_mem_bus.immediate),
+        .csrData(exe_mem_bus.csrData),
         .result_o(result_mem)
     );
 
@@ -174,6 +284,7 @@ module topCPU
         .exe_bus(id_exe_bus),
         .storeData_i(forwardB_exe),
         .aluOut_i(aluOut_exe),
+        .csrData_i(csrData_exe),
         .exe_mem_o(exe_mem_in_bus)
     );
 
@@ -193,6 +304,20 @@ module topCPU
         .equal(equal),
         .lessThan(lessThan),
         .lessThanUnsigned(lessThanUnsigned)
+    );
+
+    CSRFile #(
+        .RESET_VALUE(STATE_RESET_VALUE),
+        .HART_ID('0)
+    ) csrFile(
+        .clk(clk),
+        .rst(rst),
+        .retire_i(mem_wb_bus.valid),
+        .csrValid_i(csrValid_exe),
+        .csrOp_i(id_exe_bus.csrOp),
+        .csrAddr_i(id_exe_bus.csrAddr),
+        .csrWriteData_i(csrWriteData_exe),
+        .csrReadData_o(csrData_exe)
     );
 
     BranchCtr #(
@@ -233,7 +358,10 @@ module topCPU
         .rdData(rdData_mem),
         .toHost_o(toHost_o),
         .uartValid_o(uartValid_o),
-        .uartData_o(uartData_o)
+        .uartData_o(uartData_o),
+        .toHostHit_o(memToHostHit),
+        .uartHit_o(memUartHit),
+        .fromHostHit_o(memFromHostHit)
     );
 
     MEM_WBRegister #(

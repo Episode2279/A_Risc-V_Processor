@@ -17,7 +17,10 @@ module MEMStages
     output logic [DATA_W-1:0] rdData,
     output logic [DATA_W-1:0] toHost_o,
     output logic         uartValid_o,
-    output logic [7:0]   uartData_o
+    output logic [7:0]   uartData_o,
+    output logic         toHostHit_o,
+    output logic         uartHit_o,
+    output logic         fromHostHit_o
 );
 
     dataMem #(
@@ -39,7 +42,10 @@ module MEMStages
         .data_o(rdData),
         .toHost_o(toHost_o),
         .uartValid_o(uartValid_o),
-        .uartData_o(uartData_o)
+        .uartData_o(uartData_o),
+        .toHostHit_o(toHostHit_o),
+        .uartHit_o(uartHit_o),
+        .fromHostHit_o(fromHostHit_o)
     );
 
 endmodule

@@ -1,10 +1,15 @@
 interface IdExeBusIf;
     import TypesPkg::*;
 
+    logic              valid;
     instruction_addr_t pc;
     logic              registerWriteEnable;
     logic              dataWriteEnable;
     wb_select_t        wbSelect;
+    csr_op_t           csrOp;
+    csr_addr_t         csrAddr;
+    logic              csrUseImm;
+    word_t             csrImm;
     branch_ctr_t       branchCtr;
     alu_ctr_t          aluCtr;
     mem_access_t       memCtr;
@@ -21,9 +26,14 @@ interface IdExeBusIf;
 
     modport decode(
         output pc,
+        output valid,
         output registerWriteEnable,
         output dataWriteEnable,
         output wbSelect,
+        output csrOp,
+        output csrAddr,
+        output csrUseImm,
+        output csrImm,
         output branchCtr,
         output aluCtr,
         output memCtr,
@@ -39,9 +49,14 @@ interface IdExeBusIf;
 
     modport register_in(
         input pc,
+        input valid,
         input registerWriteEnable,
         input dataWriteEnable,
         input wbSelect,
+        input csrOp,
+        input csrAddr,
+        input csrUseImm,
+        input csrImm,
         input branchCtr,
         input aluCtr,
         input memCtr,
@@ -59,9 +74,14 @@ interface IdExeBusIf;
 
     modport register_out(
         output pc,
+        output valid,
         output registerWriteEnable,
         output dataWriteEnable,
         output wbSelect,
+        output csrOp,
+        output csrAddr,
+        output csrUseImm,
+        output csrImm,
         output branchCtr,
         output aluCtr,
         output memCtr,
@@ -79,9 +99,14 @@ interface IdExeBusIf;
 
     modport sink(
         input pc,
+        input valid,
         input registerWriteEnable,
         input dataWriteEnable,
         input wbSelect,
+        input csrOp,
+        input csrAddr,
+        input csrUseImm,
+        input csrImm,
         input branchCtr,
         input aluCtr,
         input memCtr,

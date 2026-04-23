@@ -7,11 +7,14 @@ PROJECT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 SOURCE_DIR := $(PROJECT_DIR)/source
 COREMARK_DIR := $(PROJECT_DIR)/coremark
 TESTBENCH_DIR := $(PROJECT_DIR)/testbench
+TEST_DIR := $(PROJECT_DIR)/test
+CSR_SMOKE_DIR ?= /tmp/a_riscv_processor_csr_smoke
 
 TOP ?= topCPU
 TB_TOP ?= topCPU_tb
 MAX_CYCLES ?= 10000000
 TRACE ?= 0
+PIPE_DUMP ?= 1
 
 VERILATOR ?= verilator
 VERILATOR_FLAGS ?= -sv --timing -Wno-TIMESCALEMOD
@@ -32,7 +35,7 @@ ifneq ($(filter 1 true yes on,$(TRACE)),)
 TRACE_ARG := +trace
 endif
 
-.PHONY: all help sim coremark lint build run clean clean-verilator clean-logs clean-coremark clean-all
+.PHONY: all help sim coremark lint build run konata csr-smoke clean clean-verilator clean-logs clean-coremark clean-all
 
 all: sim
 
@@ -43,12 +46,15 @@ help:
 	@printf "  make lint             Verilator lint for RTL plus SV testbench\n"
 	@printf "  make build            Build obj_dir/V$(TOP) with sim_main.cpp\n"
 	@printf "  make run              Run obj_dir/V$(TOP)\n"
+	@printf "  make konata           Convert source/topCPU_tb_output.txt to Konata trace\n"
+	@printf "  make csr-smoke        Run a small CSR instruction/counter smoke test\n"
 	@printf "  make clean            Remove Verilator outputs, waves, and sim logs\n"
 	@printf "  make clean-coremark   Remove generated CoreMark ELF/bin/map/images\n"
 	@printf "  make clean-all        Run clean and clean-coremark\n"
 	@printf "\nOptions:\n"
 	@printf "  MAX_CYCLES=10000000   Runtime cycle cap passed to sim_main.cpp\n"
 	@printf "  TRACE=1               Generate wave.vcd during run\n"
+	@printf "  PIPE_DUMP=0           Disable source/topCPU_tb_output.txt during run\n"
 
 sim: coremark lint build run
 
@@ -74,7 +80,28 @@ build:
 		--top-module $(TOP) --exe sim_main.cpp $(VERILATOR_BUILD_FLAGS) --build
 
 run:
-	cd "$(SOURCE_DIR)" && ./obj_dir/V$(TOP) +max-cycles=$(MAX_CYCLES) $(TRACE_ARG)
+	cd "$(SOURCE_DIR)" && SIM_PIPE_DUMP=$(PIPE_DUMP) ./obj_dir/V$(TOP) +max-cycles=$(MAX_CYCLES) $(TRACE_ARG)
+
+konata:
+	$(PYTHON) "$(TESTBENCH_DIR)/tb_dump_to_konata.py" \
+		"$(SOURCE_DIR)/topCPU_tb_output.txt" \
+		"$(SOURCE_DIR)/topCPU_tb_konata.trace"
+
+csr-smoke: build
+	mkdir -p "$(CSR_SMOKE_DIR)"
+	$(RISCV_GCC) -march=rv32i_zicsr -mabi=ilp32 -ffreestanding -nostdlib \
+		"$(TEST_DIR)/csr_smoke.S" -Wl,-T,"$(COREMARK_DIR)/link.ld" \
+		-o "$(CSR_SMOKE_DIR)/csr_smoke.elf"
+	$(RISCV_OBJCOPY) -O binary -j .text "$(CSR_SMOKE_DIR)/csr_smoke.elf" "$(CSR_SMOKE_DIR)/imem.bin"
+	: > "$(CSR_SMOKE_DIR)/dmem.bin"
+	cd "$(COREMARK_DIR)" && $(PYTHON) bin2words.py "$(CSR_SMOKE_DIR)/imem.bin" "$(CSR_SMOKE_DIR)/insn.mem" 0x10000
+	cd "$(COREMARK_DIR)" && $(PYTHON) bin2words.py "$(CSR_SMOKE_DIR)/dmem.bin" "$(CSR_SMOKE_DIR)/data.mem" 0x10000
+	cp "$(CSR_SMOKE_DIR)/insn.mem" "$(SOURCE_DIR)/utils/insn.mem"
+	cp "$(CSR_SMOKE_DIR)/data.mem" "$(SOURCE_DIR)/utils/data.mem"
+	cd "$(SOURCE_DIR)" && ./obj_dir/V$(TOP) +max-cycles=10000; \
+	status=$$?; \
+	cd "$(PROJECT_DIR)" && $(MAKE) --no-print-directory coremark >/dev/null; \
+	exit $$status
 
 clean: clean-verilator clean-logs
 

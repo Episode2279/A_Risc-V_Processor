@@ -20,6 +20,7 @@ module WBStages
         .aluData(wb_bus.aluSrc),
         .memData(wb_bus.rdData),
         .immediate(wb_bus.immediate),
+        .csrData(wb_bus.csrData),
         .result_o(dataWB)
     );
 

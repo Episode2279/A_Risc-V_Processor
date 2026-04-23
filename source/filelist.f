@@ -13,6 +13,7 @@ functional/id/Extender.sv
 functional/exe/ALU.sv
 functional/exe/BranchCtr.sv
 functional/exe/ForwardingUnit.sv
+functional/exe/CSRFile.sv
 functional/wb/WritebackMux.sv
 RegisterFiles/RegisterFile.sv
 memory/insnMem.sv

@@ -20,7 +20,10 @@ module dataMem
     output logic [DATA_W-1:0] data_o,
     output logic [DATA_W-1:0] toHost_o,
     output logic        uartValid_o,
-    output logic [7:0]  uartData_o
+    output logic [7:0]  uartData_o,
+    output logic        toHostHit_o,
+    output logic        uartHit_o,
+    output logic        fromHostHit_o
 );
 
     localparam int DATA_WORD_COUNT = MEM_BYTES / (DATA_W / 8);
@@ -98,6 +101,9 @@ module dataMem
     assign fromHostHit = (logicAddr[DATA_W-1:2] == FROMHOST_MMIO_ADDR[DATA_W-1:2]);
     assign toHostHit = (logicAddr[DATA_W-1:2] == TOHOST_MMIO_ADDR[DATA_W-1:2]);
     assign toHost_o = toHostReg;
+    assign toHostHit_o = toHostHit;
+    assign uartHit_o = uartHit;
+    assign fromHostHit_o = fromHostHit;
 
     initial begin
         $readmemh(MEM_FILE, mem);

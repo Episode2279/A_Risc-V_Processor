@@ -13,6 +13,7 @@ module EXE_MEMRegister
 
     always_ff @(posedge clk or negedge rst) begin
         if (~rst) begin
+            exe_mem_o.valid <= 1'b0;
             exe_mem_o.pc <= RESET_PC;
             exe_mem_o.registerWriteEnable <= 1'b0;
             exe_mem_o.dataWriteEnable <= 1'b0;
@@ -22,7 +23,9 @@ module EXE_MEMRegister
             exe_mem_o.rd <= ZERO_REG;
             exe_mem_o.immediate <= '0;
             exe_mem_o.aluOut <= '0;
+            exe_mem_o.csrData <= '0;
         end else begin
+            exe_mem_o.valid <= exe_mem_i.valid;
             exe_mem_o.pc <= exe_mem_i.pc;
             exe_mem_o.registerWriteEnable <= exe_mem_i.registerWriteEnable;
             exe_mem_o.dataWriteEnable <= exe_mem_i.dataWriteEnable;
@@ -32,6 +35,7 @@ module EXE_MEMRegister
             exe_mem_o.rd <= exe_mem_i.rd;
             exe_mem_o.immediate <= exe_mem_i.immediate;
             exe_mem_o.aluOut <= exe_mem_i.aluOut;
+            exe_mem_o.csrData <= exe_mem_i.csrData;
         end
     end
 

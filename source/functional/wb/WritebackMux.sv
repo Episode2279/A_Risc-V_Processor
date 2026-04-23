@@ -11,6 +11,7 @@ module WritebackMux
     input  logic [DATA_W-1:0]  aluData,
     input  logic [DATA_W-1:0]  memData,
     input  logic [ADDR_W-1:0]  immediate,
+    input  logic [DATA_W-1:0]  csrData,
     output logic [DATA_W-1:0]  result_o
 );
 
@@ -20,6 +21,7 @@ module WritebackMux
             WB_MEM: result_o = memData;
             WB_PC4: result_o = pc + PC_INCREMENT;
             WB_IMM: result_o = immediate;
+            WB_CSR: result_o = csrData;
             default: result_o = '0;
         endcase
     end

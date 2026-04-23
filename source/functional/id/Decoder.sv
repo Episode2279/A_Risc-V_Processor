@@ -10,6 +10,10 @@ module Decoder
     output logic                   registerWriteEnable,
     output logic                   dataWriteEnable,
     output wb_select_t             wbSelect,
+    output csr_op_t                csrOp,
+    output csr_addr_t              csrAddr,
+    output logic                   csrUseImm,
+    output logic [IMM_W-1:0]       csrImm,
     output branch_ctr_t            branchCtr,
     output alu_ctr_t               aluCtr,
     output mem_access_t            memCtr,
@@ -40,6 +44,10 @@ module Decoder
         registerWriteEnable = 1'b0;
         dataWriteEnable = 1'b0;
         wbSelect = WB_ALU;
+        csrOp = CSR_NONE;
+        csrAddr = insn[31:20];
+        csrUseImm = 1'b0;
+        csrImm = {{(IMM_W-5){1'b0}}, insn[19:15]};
         branchCtr = BR_NONE;
         aluCtr = ALU_ADD;
         memCtr = MEM_WORD;
@@ -194,6 +202,44 @@ module Decoder
                 aluSrcASelect = 1'b1;
                 aluSrcBSelect = 1'b1;
                 immediate = {insn[31:12], 12'b0};
+            end
+
+            7'b1110011: begin
+                wbSelect = WB_CSR;
+                registerWriteEnable = (rd != '0);
+                immediate = '0;
+
+                unique case (funct3)
+                    3'b001: begin
+                        csrOp = CSR_RW;
+                        useRs1 = 1'b1;
+                    end
+                    3'b010: begin
+                        csrOp = (rs1 == '0) ? CSR_NONE : CSR_RS;
+                        useRs1 = (rs1 != '0);
+                    end
+                    3'b011: begin
+                        csrOp = (rs1 == '0) ? CSR_NONE : CSR_RC;
+                        useRs1 = (rs1 != '0);
+                    end
+                    3'b101: begin
+                        csrOp = CSR_RW;
+                        csrUseImm = 1'b1;
+                    end
+                    3'b110: begin
+                        csrOp = (insn[19:15] == 5'd0) ? CSR_NONE : CSR_RS;
+                        csrUseImm = 1'b1;
+                    end
+                    3'b111: begin
+                        csrOp = (insn[19:15] == 5'd0) ? CSR_NONE : CSR_RC;
+                        csrUseImm = 1'b1;
+                    end
+                    default: begin
+                        registerWriteEnable = 1'b0;
+                        wbSelect = WB_ALU;
+                        csrOp = CSR_NONE;
+                    end
+                endcase
             end
 
             default: begin

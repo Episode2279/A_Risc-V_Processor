@@ -61,6 +61,7 @@ make lint            # Verilator lint for RTL plus SV testbench
 make build           # Build the Verilated topCPU executable
 make run             # Run the existing Verilated executable
 make sim             # coremark + lint + build + run
+make csr-smoke       # Run a small CSR instruction/counter smoke test
 make clean           # Remove Verilator outputs, waves, and sim logs
 make clean-coremark  # Remove generated CoreMark ELF/bin/map/images
 make clean-all       # clean + clean-coremark
@@ -87,6 +88,30 @@ The simulation result is decided by `tohost` at `0x0000FFF8`:
 - `tohost == 1`: success
 - `tohost != 0 && tohost != 1`: failure
 - no nonzero `tohost` before `MAX_CYCLES`: timeout
+
+## CSR Support
+
+The core supports the standard CSR instruction forms:
+
+- `csrrw`, `csrrs`, `csrrc`
+- `csrrwi`, `csrrsi`, `csrrci`
+
+Implemented CSR state includes common machine-mode registers and counters:
+
+- `mstatus`, `mie`, `mtvec`, `mscratch`
+- `mepc`, `mcause`, `mtval`, `mip`
+- `mcycle`, `mcycleh`, `minstret`, `minstreth`
+- read aliases `cycle`, `cycleh`, `time`, `timeh`, `instret`, `instreth`
+- read-only IDs such as `misa` and `mhartid`
+
+Run the CSR smoke test with:
+
+```sh
+make csr-smoke
+```
+
+The smoke test temporarily loads `test/csr_smoke.S`, verifies CSR read/write and
+`cycle`, then restores the default CoreMark memory images.
 
 ## Vivado Testbench
 

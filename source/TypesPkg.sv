@@ -29,6 +29,7 @@ package TypesPkg;
     typedef logic [BLOCK_SIZE-1:0] block_t;
     typedef logic [DATA_ADDR-1:0] data_addr_t;
     typedef logic [REG_ADDR-1:0] reg_addr_t;
+    typedef logic [11:0] csr_addr_t;
     // Program counter and instruction addresses use full datapath width.
     typedef word_t instruction_addr_t;
 
@@ -54,12 +55,22 @@ package TypesPkg;
     } alu_ctr_t;
 
     // Write-back source selection for the final result sent to the register file.
-    typedef enum logic [1:0] {
-        WB_ALU = 2'b00,
-        WB_MEM = 2'b01,
-        WB_PC4 = 2'b10,
-        WB_IMM = 2'b11
+    typedef enum logic [2:0] {
+        WB_ALU = 3'd0,
+        WB_MEM = 3'd1,
+        WB_PC4 = 3'd2,
+        WB_IMM = 3'd3,
+        WB_CSR = 3'd4
     } wb_select_t;
+
+    // CSR operation selected by SYSTEM instructions. Immediate CSR variants
+    // reuse these operations with a zero-extended zimm source value.
+    typedef enum logic [1:0] {
+        CSR_NONE = 2'd0,
+        CSR_RW   = 2'd1,
+        CSR_RS   = 2'd2,
+        CSR_RC   = 2'd3
+    } csr_op_t;
 
     // Branch/jump operation selected in decode and resolved in execute.
     typedef enum logic [3:0] {

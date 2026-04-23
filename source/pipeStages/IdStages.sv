@@ -10,6 +10,7 @@ module IdStages
     IdExeBusIf.decode        id_bus
 );
 
+    assign id_bus.valid = (id_packet.insn != '0);
     assign id_bus.pc = id_packet.pc;
 
     Decoder #(
@@ -21,6 +22,10 @@ module IdStages
         .registerWriteEnable(id_bus.registerWriteEnable),
         .dataWriteEnable(id_bus.dataWriteEnable),
         .wbSelect(id_bus.wbSelect),
+        .csrOp(id_bus.csrOp),
+        .csrAddr(id_bus.csrAddr),
+        .csrUseImm(id_bus.csrUseImm),
+        .csrImm(id_bus.csrImm),
         .branchCtr(id_bus.branchCtr),
         .aluCtr(id_bus.aluCtr),
         .memCtr(id_bus.memCtr),

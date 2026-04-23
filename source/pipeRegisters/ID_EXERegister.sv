@@ -16,9 +16,14 @@ module ID_EXERegister
     always_ff @(posedge clk or negedge rst) begin
         if (~rst || flush || stall) begin
             exe_bus_o.pc <= RESET_PC;
+            exe_bus_o.valid <= 1'b0;
             exe_bus_o.registerWriteEnable <= 1'b0;
             exe_bus_o.dataWriteEnable <= 1'b0;
             exe_bus_o.wbSelect <= WB_ALU;
+            exe_bus_o.csrOp <= CSR_NONE;
+            exe_bus_o.csrAddr <= '0;
+            exe_bus_o.csrUseImm <= 1'b0;
+            exe_bus_o.csrImm <= '0;
             exe_bus_o.branchCtr <= BR_NONE;
             exe_bus_o.aluCtr <= ALU_ADD;
             exe_bus_o.memCtr <= MEM_WORD;
@@ -34,9 +39,14 @@ module ID_EXERegister
             exe_bus_o.immediate <= '0;
         end else begin
             exe_bus_o.pc <= id_bus_i.pc;
+            exe_bus_o.valid <= id_bus_i.valid;
             exe_bus_o.registerWriteEnable <= id_bus_i.registerWriteEnable;
             exe_bus_o.dataWriteEnable <= id_bus_i.dataWriteEnable;
             exe_bus_o.wbSelect <= id_bus_i.wbSelect;
+            exe_bus_o.csrOp <= id_bus_i.csrOp;
+            exe_bus_o.csrAddr <= id_bus_i.csrAddr;
+            exe_bus_o.csrUseImm <= id_bus_i.csrUseImm;
+            exe_bus_o.csrImm <= id_bus_i.csrImm;
             exe_bus_o.branchCtr <= id_bus_i.branchCtr;
             exe_bus_o.aluCtr <= id_bus_i.aluCtr;
             exe_bus_o.memCtr <= id_bus_i.memCtr;
