@@ -1,10 +1,12 @@
 module ID_EXERegister
     import TypesPkg::*;
 #(
+    // Bubble/reset values for PC and register addresses.
     parameter logic [WORD_SIZE-1:0] RESET_PC = RESET_VECTOR,
     parameter logic [REG_ADDR-1:0] ZERO_REG = '0
 )
 (
+    // ID/EX separates decode/register-read from execute.
     input logic               clk,
     input logic               rst,
     input logic               stall,
@@ -15,6 +17,8 @@ module ID_EXERegister
 
     always_ff @(posedge clk or negedge rst) begin
         if (~rst || flush || stall) begin
+            // Reset, branch flush, and load-use stall all inject an execute
+            // bubble by clearing every side-effecting control signal.
             exe_bus_o.pc <= RESET_PC;
             exe_bus_o.valid <= 1'b0;
             exe_bus_o.registerWriteEnable <= 1'b0;
@@ -38,6 +42,8 @@ module ID_EXERegister
             exe_bus_o.rd <= ZERO_REG;
             exe_bus_o.immediate <= '0;
         end else begin
+            // Normal pipeline advance: copy the complete decoded bundle into
+            // the execute stage for ALU, branch, CSR, and forwarding logic.
             exe_bus_o.pc <= id_bus_i.pc;
             exe_bus_o.valid <= id_bus_i.valid;
             exe_bus_o.registerWriteEnable <= id_bus_i.registerWriteEnable;

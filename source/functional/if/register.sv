@@ -1,10 +1,12 @@
 module register
     import TypesPkg::*;
 #(
+    // Generic enabled register retained for small datapath helpers.
     parameter int WIDTH = WORD_SIZE,
     parameter logic [WIDTH-1:0] RESET_VALUE = '0
 )
 (
+    // Active-low reset and write-enable match the rest of the pipeline.
     input  logic             clk,
     input  logic             rst,
     input  logic             wrEnable,
@@ -16,6 +18,7 @@ module register
         if (!rst) begin
             regOut <= RESET_VALUE;
         end else if (wrEnable) begin
+            // Hold the previous value whenever wrEnable is low.
             regOut <= regIn;
         end
     end

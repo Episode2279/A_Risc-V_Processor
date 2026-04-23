@@ -1,10 +1,14 @@
 `timescale 1ns / 1ps
 
 module topCPU_tb #(
+    // Hard simulation cap. Normal tests should finish by writing tohost before
+    // this limit; reaching the cap is reported as TIMEOUT.
     parameter int MAX_CYCLES = 10_000_000
 );
     import TypesPkg::*;
 
+    // File names are kept under source/ so Vivado and Verilator flows generate
+    // artifacts in the same place used by the Konata converter script.
     localparam time CLK_PERIOD = 10ns;
     localparam string DEBUG_FILE_NAME = "topCPU_tb_debug.txt";
     localparam string DUMP_FILE_NAME  = "topCPU_tb_output.txt";
@@ -18,6 +22,7 @@ module topCPU_tb #(
         "C:/Users/22793/Desktop/programming/cpubase/A_Risc-V_Processor/source/utils/data.mem";
     localparam word_t TOHOST_PASS_VALUE = word_t'(32'd1);
 
+    // DUT IO signals.
     logic              clk;
     logic              rst;
     word_t             fromHost;
@@ -28,6 +33,7 @@ module topCPU_tb #(
     instruction_addr_t checkPC;
     word_t             checkData;
 
+    // Testbench bookkeeping for logs, memory-image discovery, and timeout state.
     int cycle_count;
     int log_fd;
     int dump_fd;
@@ -37,6 +43,8 @@ module topCPU_tb #(
     bit data_mem_loaded;
     bit timed_out;
 
+    // Device under test. Verilator-only debug ports are intentionally left
+    // unconnected here because this SV testbench reads hierarchy directly.
     topCPU dut (
         .clk(clk),
         .rst(rst),
@@ -99,22 +107,29 @@ module topCPU_tb #(
     );
 
     initial begin
+        // Free-running 100 MHz simulation clock.
         clk = 1'b0;
         forever #(CLK_PERIOD / 2) clk = ~clk;
     end
 
     function automatic bit insn_known(input instruction_t insn);
         begin
+            // Reduction XOR returns X when any bit is X, making this a compact
+            // four-state validity check for dump/visualization purposes.
             insn_known = (^insn !== 1'bx);
         end
     endfunction
 
     function automatic bit word_known(input word_t value);
         begin
+            // Avoid treating uninitialized tohost/check data as a real result.
             word_known = (^value !== 1'bx);
         end
     endfunction
 
+    // Open a candidate memory-image path and load it into the DUT hierarchy if
+    // it exists. This makes the same testbench work from Vivado project dirs,
+    // command-line simulation dirs, and this repository root.
     task automatic readmemh_if_exists(
         input string candidate_path,
         input string label,
@@ -127,6 +142,7 @@ module topCPU_tb #(
             if (fd != 0) begin
                 $fclose(fd);
                 if (label == "instruction") begin
+                    // Memories store one 32-bit hex word per line.
                     $readmemh(candidate_path, dut.ifStage.insnMem.mem);
                 end else begin
                     $readmemh(candidate_path, dut.memStage.dataMem.mem);
@@ -142,6 +158,8 @@ module topCPU_tb #(
     task automatic reload_memories;
         bit loaded;
         begin
+            // Try absolute paths first for Vivado, then several relative paths
+            // for command-line simulations launched from different directories.
             insn_mem_loaded = 1'b0;
             data_mem_loaded = 1'b0;
 
@@ -195,6 +213,8 @@ module topCPU_tb #(
 
     task automatic open_log_file;
         begin
+            // Debug log is human-readable and intentionally separate from the
+            // structured pipeline dump used by tb_dump_to_konata.py.
             log_fd = 0;
             log_path = "";
 
@@ -236,6 +256,8 @@ module topCPU_tb #(
 
     task automatic open_dump_file;
         begin
+            // Structured dump path mirrors open_log_file's search strategy so
+            // users can run the testbench from Vivado without changing cwd.
             dump_fd = 0;
             dump_path = "";
 
@@ -277,6 +299,8 @@ module topCPU_tb #(
 
     task automatic write_dump_header;
         begin
+            // Header is versioned so the Python converter can reject old or
+            // incompatible dump formats cleanly in the future.
             $fdisplay(dump_fd, "TB_PIPE_DUMP_V1");
             $fdisplay(dump_fd, "META clk_period_ns=%0d reset_vector=0x%08h", 10, RESET_VECTOR);
             $fdisplay(dump_fd, "META max_cycles=%0d", MAX_CYCLES);
@@ -289,6 +313,8 @@ module topCPU_tb #(
         bit if_valid;
         bit id_valid;
         begin
+            // The dump schema is intentionally text based: it is easy to inspect
+            // by hand and easy for tb_dump_to_konata.py to parse.
             if_valid = insn_known(dut.if_fetch_bus.insn);
             id_valid = insn_known(dut.if_decode_bus.insn);
 
@@ -321,6 +347,8 @@ module topCPU_tb #(
                       dut.mem_wb_bus.pc, dut.mem_wb_bus.rd, dut.mem_wb_bus.registerWriteEnable,
                       dut.mem_wb_bus.wbSelect, dut.mem_wb_bus.aluSrc, dut.mem_wb_bus.rdData, dut.data_wb);
             if (uartValid && (uartData != 8'h0d)) begin
+                // UART and tohost are emitted as explicit events so the trace
+                // viewer can annotate key software-visible moments.
                 $fdisplay(dump_fd, "EVENT kind=uart cycle=%0d data=0x%02h", cycle_count, uartData);
             end
             if (word_known(toHost) && (toHost != '0)) begin
@@ -331,6 +359,8 @@ module topCPU_tb #(
     endtask
 
     initial begin
+        // Hold reset low for two positive edges, matching the active-low reset
+        // convention used by the RTL.
         rst = 1'b0;
         fromHost = '0;
         cycle_count = 0;
@@ -353,6 +383,8 @@ module topCPU_tb #(
         forever begin
             @(posedge clk);
             cycle_count++;
+            // Wait a delta of real time so registered outputs and combinational
+            // debug paths have settled before sampling the pipeline snapshot.
             #1ns;
 
             $fdisplay(log_fd, "%5t | %5d | 0x%08h | 0x%08h  | 0x%08h",
@@ -364,6 +396,7 @@ module topCPU_tb #(
             end
 
             if ((checkPC >= 32'h0000_04F0) && (checkPC <= 32'h0000_0510)) begin
+                // Extra targeted debug around the software completion path.
                 $fdisplay(log_fd,
                           "           DBG | toHost=0x%08h hit=%0d wr=%0d memCtr=%0b aluOut=0x%08h dataB=0x%08h",
                           toHost,
@@ -377,10 +410,12 @@ module topCPU_tb #(
             dump_cycle_snapshot();
 
             if (word_known(toHost) && (toHost != '0)) begin
+                // Software writes a non-zero tohost value to end the run.
                 break;
             end
 
             if (cycle_count >= MAX_CYCLES) begin
+                // A timeout event is written to both logs before ending the sim.
                 timed_out = 1'b1;
                 $fdisplay(dump_fd,
                           "EVENT kind=timeout cycle=%0d limit=%0d checkPC=0x%08h check=0x%08h toHost=0x%08h",
@@ -394,6 +429,8 @@ module topCPU_tb #(
         end
 
         if (timed_out) begin
+            // Console output is intentionally short: one begin message and one
+            // final status line group. Detailed data stays in the log files.
             $display("*****simulation finished*****\n cycles=%0d limit=%0d toHost=0x%08h pc=0x%08h dump=%s debug=%s",
                      cycle_count, MAX_CYCLES, toHost, checkPC, dump_path, log_path);
             $display("*****simulation result: TIMEOUT*****");

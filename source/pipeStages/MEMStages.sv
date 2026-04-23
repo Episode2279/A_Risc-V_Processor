@@ -1,6 +1,7 @@
 module MEMStages
     import TypesPkg::*;
 #(
+    // Memory-stage sizing and MMIO map. The MMIO addresses must match link.ld.
     parameter int DATA_W = WORD_SIZE,
     parameter int LOGIC_ADDR_W = DATA_ADDR,
     parameter int MEM_BYTES = DATA_ADDR_SIZE,
@@ -10,6 +11,7 @@ module MEMStages
     parameter string MEM_FILE = "utils/data.mem"
 )
 (
+    // MEM owns data memory access and simple memory-mapped host peripherals.
     input  logic         clk,
     input  logic         rst,
     input  logic [DATA_W-1:0] fromHost_i,
@@ -23,6 +25,8 @@ module MEMStages
     output logic         fromHostHit_o
 );
 
+    // All store/load behavior is localized inside dataMem. The stage wrapper
+    // only maps the EX/MEM bus fields onto the memory interface.
     dataMem #(
         .DATA_W(DATA_W),
         .LOGIC_ADDR_W(LOGIC_ADDR_W),

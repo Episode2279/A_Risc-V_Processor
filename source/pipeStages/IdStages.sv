@@ -1,18 +1,25 @@
 module IdStages
     import TypesPkg::*;
 #(
+    // Decoder sizing follows instruction/register widths from the package.
     parameter int INSN_W = INS_SIZE,
     parameter int REG_ADDR_W = REG_ADDR,
     parameter int IMM_W = WORD_SIZE
 )
 (
+    // ID consumes the IF/ID packet and produces control/register metadata for
+    // the ID/EX bus. Register-file data is attached in topCPU.
     InstructionPacketIf.sink id_packet,
     IdExeBusIf.decode        id_bus
 );
 
+    // A zero instruction is treated as a bubble for visualization/retirement.
     assign id_bus.valid = (id_packet.insn != '0);
+    // Carry the fetch PC alongside all decoded controls.
     assign id_bus.pc = id_packet.pc;
 
+    // Decoder owns ISA bitfield interpretation. The stage wrapper simply maps
+    // decoder outputs into the strongly typed pipeline interface.
     Decoder #(
         .INSN_W(INSN_W),
         .REG_ADDR_W(REG_ADDR_W),

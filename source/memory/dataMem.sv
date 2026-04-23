@@ -1,15 +1,18 @@
 module dataMem
     import TypesPkg::*;
 #(
+    // Data memory is byte addressed externally but stored as DATA_W-bit words.
     parameter int DATA_W = WORD_SIZE,
     parameter int LOGIC_ADDR_W = DATA_ADDR,
     parameter int MEM_BYTES = DATA_ADDR_SIZE,
+    // MMIO addresses are shared with the linker script and bare-metal tests.
     parameter logic [DATA_W-1:0] UART_TX_MMIO_ADDR = UART_TX_ADDR,
     parameter logic [DATA_W-1:0] FROMHOST_MMIO_ADDR = FROMHOST_ADDR,
     parameter logic [DATA_W-1:0] TOHOST_MMIO_ADDR = TOHOST_ADDR,
     parameter string MEM_FILE = "utils/data.mem"
 )
 (
+    // Synchronous write port and combinational read port.
     input  logic        clk,
     input  logic        rst,
     input  logic [DATA_W-1:0] logicAddr,
@@ -26,6 +29,7 @@ module dataMem
     output logic        fromHostHit_o
 );
 
+    // The memory image is written as one DATA_W-bit word per text line.
     localparam int DATA_WORD_COUNT = MEM_BYTES / (DATA_W / 8);
 
     logic [DATA_W-1:0] mem [0:DATA_WORD_COUNT-1];
@@ -46,6 +50,8 @@ module dataMem
         begin
             // RV32 uses little-endian byte lanes, so offset 0 maps to the low byte.
             shiftedWord = rawWord >> (offset * 8);
+            // Signed load forms extend the selected byte/halfword; unsigned
+            // forms zero-extend. Word loads return the full aligned word.
             unique case (accessMode)
                 MEM_BYTE:   format_load = {{24{shiftedWord[7]}}, shiftedWord[7:0]};
                 MEM_HALF:   format_load = {{16{shiftedWord[15]}}, shiftedWord[15:0]};
@@ -65,6 +71,8 @@ module dataMem
     );
         logic [DATA_W-1:0] mergedWord;
         begin
+            // Start from the existing word so byte/halfword stores update only
+            // their selected byte lanes.
             mergedWord = currentWord;
             unique case (accessMode)
                 MEM_BYTE: begin
@@ -76,6 +84,9 @@ module dataMem
                     endcase
                 end
                 MEM_HALF: begin
+                    // This implementation permits unaligned halfword writes at
+                    // offsets 1 and 2 by updating the lanes inside one word.
+                    // Offset 3 would cross a word boundary, so it is ignored.
                     unique case (offset)
                         2'd0: mergedWord[15:0]  = writeData[15:0];
                         2'd1: mergedWord[23:8]  = writeData[15:0];
@@ -106,10 +117,13 @@ module dataMem
     assign fromHostHit_o = fromHostHit;
 
     initial begin
+        // Simulation initialization from one-word-per-line hex data.
         $readmemh(MEM_FILE, mem);
     end
 
     always_comb begin
+        // MMIO reads are decoded before normal RAM so software can poll the
+        // host-visible registers without aliasing RAM contents.
         if (fromHostHit) begin
             readWord = fromHost_i;
         end else if (toHostHit) begin
@@ -120,6 +134,7 @@ module dataMem
             readWord = mem[wordAddr];
         end
 
+        // Apply load extension after selecting the raw RAM/MMIO word.
         data_o = format_load(readWord, accessCtr, byteOffset);
     end
 
@@ -129,10 +144,13 @@ module dataMem
             uartValid_o <= 1'b0;
             uartData_o <= '0;
         end else begin
+            // UART valid is a one-cycle pulse generated only on UART writes.
             uartValid_o <= 1'b0;
 
             if (writeEnable) begin
                 if (toHostHit) begin
+                    // tohost is a retained register so the testbench can stop
+                    // when software writes a non-zero completion code.
                     toHostReg <= merge_store(toHostReg, data_i, accessCtr, byteOffset);
                 end else if (uartHit) begin
                     uartValid_o <= 1'b1;

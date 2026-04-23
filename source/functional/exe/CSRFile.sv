@@ -1,8 +1,12 @@
 module CSRFile
     import TypesPkg::*;
 #(
+    // Reset value used for writable machine CSRs. Keeping it parameterized
+    // makes smoke tests able to start from a known non-zero CSR state if needed.
     parameter logic [WORD_SIZE-1:0] RESET_VALUE = '0,
+    // Hardware thread ID reported through mhartid.
     parameter logic [WORD_SIZE-1:0] HART_ID = '0,
+    // RV32I machine ISA encoding: MXL=1 and I extension bit set.
     parameter logic [WORD_SIZE-1:0] MISA_VALUE = 32'h4000_0100
 )
 (
@@ -16,6 +20,9 @@ module CSRFile
     output word_t     csrReadData_o
 );
 
+    // CSR addresses used by the current bare-metal tests. This file implements
+    // the commonly needed machine counters and machine-mode software CSRs, but
+    // it does not yet implement trap entry/return side effects.
     localparam csr_addr_t CSR_CYCLE    = 12'hC00;
     localparam csr_addr_t CSR_TIME     = 12'hC01;
     localparam csr_addr_t CSR_INSTRET  = 12'hC02;
@@ -54,6 +61,8 @@ module CSRFile
     word_t nextValue;
 
     always_comb begin
+        // Reads are combinational so CSR instructions can return the old CSR
+        // value in the same execute stage where the write data is calculated.
         unique case (csrAddr_i)
             CSR_CYCLE, CSR_TIME, CSR_MCYCLE:       currentValue = mcycle[31:0];
             CSR_CYCLEH, CSR_TIMEH, CSR_MCYCLEH:    currentValue = mcycle[63:32];
@@ -73,6 +82,8 @@ module CSRFile
             default:                               currentValue = '0;
         endcase
 
+        // CSRRS/CSRRC operate as read-modify-write instructions. CSR_NONE is
+        // used by read-only forms such as csrrs rd, csr, x0.
         unique case (csrOp_i)
             CSR_RW:  nextValue = csrWriteData_i;
             CSR_RS:  nextValue = currentValue | csrWriteData_i;
@@ -96,12 +107,17 @@ module CSRFile
             mcycle <= '0;
             minstret <= '0;
         end else begin
+            // mcycle/time advance every simulated core cycle. The user-mode
+            // cycle/time aliases share this counter for simple bare-metal code.
             mcycle <= mcycle + 64'd1;
+            // minstret increments when a valid instruction reaches writeback.
             if (retire_i) begin
                 minstret <= minstret + 64'd1;
             end
 
             if (csrValid_i && (csrOp_i != CSR_NONE)) begin
+                // Only writable CSRs update. Unknown or read-only IDs simply
+                // ignore writes, which is sufficient for the current tests.
                 unique case (csrAddr_i)
                     CSR_MSTATUS:  mstatus <= nextValue;
                     CSR_MIE:      mie <= nextValue;

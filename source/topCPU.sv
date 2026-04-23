@@ -21,8 +21,10 @@ module topCPU
     parameter logic [DATA_W-1:0] TOHOST_MMIO_ADDR = TOHOST_ADDR
 )
 (
+    // Core clock/reset. rst is active-low throughout this project.
     input  logic              clk,
     input  logic              rst,
+    // Host-side MMIO input and completion/UART outputs used by testbenches.
     input  logic [DATA_W-1:0] fromHost_i,
     output logic [DATA_W-1:0] toHost_o,
     output logic              uartValid_o,
@@ -84,10 +86,14 @@ module topCPU
 `endif
 );
 
+    // Branch target produced in EX and consumed by IF on the next PC update.
     logic [ADDR_W-1:0] pc_br;
 
+    // Register-file read data is generated in ID. Forwarded versions are used
+    // by EX so the core can run dependent ALU instructions without stalling.
     logic [DATA_W-1:0] regDataA_id, regDataB_id;
     logic [DATA_W-1:0] forwardA_exe, forwardB_exe;
+    // Main execute, CSR, memory, and writeback data signals.
     logic [DATA_W-1:0] aluOut_exe;
     logic [DATA_W-1:0] csrData_exe;
     logic [DATA_W-1:0] csrWriteData_exe;
@@ -95,6 +101,7 @@ module topCPU
     logic [DATA_W-1:0] data_wb;
     logic [DATA_W-1:0] result_mem;
 
+    // Branch comparator outputs and hazard/redirect controls.
     logic equal;
     logic lessThan;
     logic lessThanUnsigned;
@@ -107,6 +114,9 @@ module topCPU
     logic memUartHit;
     logic memFromHostHit;
 
+    // Strongly typed pipeline interfaces. The *_in_bus forms are combinational
+    // inputs to a pipeline register; the non-suffixed forms are registered
+    // outputs from that boundary.
     InstructionPacketIf if_fetch_bus();
     InstructionPacketIf if_decode_bus();
     IdExeBusIf          id_exe_in_bus();
@@ -116,6 +126,7 @@ module topCPU
     MemWbBusIf          mem_wb_in_bus();
     MemWbBusIf          mem_wb_bus();
 
+    // Lightweight architectural visibility for tests and Verilator harness.
     assign check = if_fetch_bus.insn;
     assign checkPC = if_fetch_bus.pc;
     assign checkData = data_wb;
@@ -123,9 +134,12 @@ module topCPU
     assign id_exe_in_bus.dataA = regDataA_id;
     assign id_exe_in_bus.dataB = regDataB_id;
     assign csrWriteData_exe = id_exe_bus.csrUseImm ? id_exe_bus.csrImm : forwardA_exe;
+    // CSR writes are performed in EX for CSR instructions that reached ID/EX.
     assign csrValid_exe = id_exe_bus.valid && (id_exe_bus.wbSelect == WB_CSR);
 
 `ifdef VERILATOR
+    // Flattened debug mirrors are Verilator-only so generated C++ can dump the
+    // pipeline without depending on private hierarchy names or interface layout.
     assign dbg_wrEnable = wrEnable;
     assign dbg_stall = stall;
     assign dbg_flush = flush;
@@ -174,6 +188,8 @@ module topCPU
     assign dbg_wb_dataWb = data_wb;
 `endif
 
+    // Register file is written from WB and read by ID in the same cycle. Its
+    // internal write-first bypass handles WB-to-ID same-cycle dependencies.
     RegisterFile #(
         .DATA_W(DATA_W),
         .REG_COUNT(REG_COUNT),
@@ -191,6 +207,7 @@ module topCPU
         .rdB(regDataB_id)
     );
 
+    // IF owns PC update and instruction memory lookup.
     IfStages #(
         .ADDR_W(ADDR_W),
         .INSN_W(INSN_W),
@@ -207,6 +224,7 @@ module topCPU
         .fetch_packet(if_fetch_bus)
     );
 
+    // IF/ID freezes on load-use stalls and flushes on control redirects.
     IF_IDRegister #(
         .RESET_PC(RESET_PC)
     ) if_id(
@@ -218,6 +236,8 @@ module topCPU
         .packet_o(if_decode_bus)
     );
 
+    // Decode maps the instruction word into typed control signals and register
+    // address metadata. Register data is attached by topCPU below.
     IdStages #(
         .INSN_W(INSN_W),
         .REG_ADDR_W(REG_ADDR_W),
@@ -227,6 +247,8 @@ module topCPU
         .id_bus(id_exe_in_bus)
     );
 
+    // Hazard controller currently handles the classic load-use stall. ALU
+    // dependencies are handled later by ForwardingUnit.
     controller #(
         .REG_ADDR_W(REG_ADDR_W)
     ) control(
@@ -236,6 +258,8 @@ module topCPU
         .stall(stall)
     );
 
+    // ID/EX injects a bubble on stalls/flushes so side effects are suppressed
+    // while the front of the pipe is held or redirected.
     ID_EXERegister #(
         .RESET_PC(RESET_PC),
         .ZERO_REG('0)
@@ -306,6 +330,8 @@ module topCPU
         .lessThanUnsigned(lessThanUnsigned)
     );
 
+    // CSR file sits in EX so CSR read-modify-write instructions can read the
+    // old CSR value and compute the new one in the same pipeline stage.
     CSRFile #(
         .RESET_VALUE(STATE_RESET_VALUE),
         .HART_ID('0)
@@ -320,6 +346,8 @@ module topCPU
         .csrReadData_o(csrData_exe)
     );
 
+    // Branch/jump decision happens in EX. A taken redirect flushes IF/ID and
+    // ID/EX through the shared flush signal.
     BranchCtr #(
         .ADDR_W(ADDR_W),
         .PC_INCREMENT(PC_INCREMENT)
@@ -333,6 +361,7 @@ module topCPU
         .pc_o(pc_br)
     );
 
+    // Register the execute results before data memory.
     EXE_MEMRegister #(
         .RESET_PC(RESET_PC),
         .ZERO_REG('0)
@@ -343,6 +372,8 @@ module topCPU
         .exe_mem_o(exe_mem_bus)
     );
 
+    // Data memory also implements the simple UART/fromhost/tohost MMIO region
+    // used by CoreMark and riscv-tests.
     MEMStages #(
         .DATA_W(DATA_W),
         .LOGIC_ADDR_W(DATA_MEM_ADDR_W),
@@ -364,6 +395,7 @@ module topCPU
         .fromHostHit_o(memFromHostHit)
     );
 
+    // Register memory-stage values before final writeback selection.
     MEM_WBRegister #(
         .RESET_PC(RESET_PC),
         .ZERO_REG('0)
@@ -374,6 +406,7 @@ module topCPU
         .mem_wb_o(mem_wb_bus)
     );
 
+    // Select the value that is written to the architectural register file.
     WBStages #(
         .DATA_W(DATA_W),
         .ADDR_W(ADDR_W),

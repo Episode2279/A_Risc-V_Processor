@@ -1,6 +1,7 @@
 module IfStages
     import TypesPkg::*;
 #(
+    // Fetch-stage sizing and memory-image parameters.
     parameter int ADDR_W = WORD_SIZE,
     parameter int INSN_W = INS_SIZE,
     parameter int MEM_ADDR_W = INS_ADDR,
@@ -10,14 +11,18 @@ module IfStages
     parameter string MEM_FILE = "utils/insn.mem"
 )
 (
+    // Fetch stage owns the PC register and combinational instruction memory.
     input logic                clk,
     input logic                rst,
+    // Redirect target and enable from execute-stage branch resolution.
     input logic [ADDR_W-1:0]   jump_address,
     input logic                jump_enable,
     input logic                wrEnable,
     InstructionPacketIf.source fetch_packet
 );
 
+    // PC updates only when wrEnable is asserted. A load-use stall therefore
+    // freezes both PC and IF/ID so decode can retry the same instruction.
     PC #(
         .ADDR_W(ADDR_W),
         .RESET_PC(RESET_PC),
@@ -31,6 +36,8 @@ module IfStages
         .pc_address_out(fetch_packet.pc)
     );
 
+    // Instruction memory is combinational, so a new PC produces a same-cycle
+    // instruction word for the IF packet.
     insnMem #(
         .ADDR_W(ADDR_W),
         .INSN_W(INSN_W),
