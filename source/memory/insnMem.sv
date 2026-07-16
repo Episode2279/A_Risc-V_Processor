@@ -22,11 +22,15 @@ module insnMem
 
     logic [INSN_W-1:0] mem [0:INS_WORD_COUNT-1];
     logic [$clog2(INS_WORD_COUNT)-1:0] wordAddr;
+    string runtimeMemFile;
 
     initial begin
         // Simulation memory image. Vivado/Verilator tests may override this
         // with explicit $readmemh calls after elaboration.
-        $readmemh(MEM_FILE, mem);
+        if ($value$plusargs("insn-mem=%s", runtimeMemFile))
+            $readmemh(runtimeMemFile, mem);
+        else
+            $readmemh(MEM_FILE, mem);
     end
 
     // Drop the low two byte-offset bits because each array entry is one word.

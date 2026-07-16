@@ -19,9 +19,23 @@ package TypesPkg;
     // Encoded width needed to address one register entry.
     parameter int REG_ADDR = 5;
 
+    // Initial out-of-order configuration.  These sizes are deliberately small
+    // enough for simulation and FPGA experiments while the new back end is
+    // brought up incrementally.
+    parameter int PHYS_REG_NUM = 48;
+    parameter int ROB_ENTRY_NUM = 16;
+    parameter int ISSUE_QUEUE_ENTRY_NUM = 8;
+    parameter int LSQ_ENTRY_NUM = 8;
+    // A 1K-entry PHT materially reduces destructive aliasing in CoreMark while
+    // remaining small compared with the ROB/PRF state in this educational core.
+    parameter int BPU_HISTORY_WIDTH = 10;
+
     // Derived address widths used by memory index signals inside the design.
     localparam int INS_ADDR = $clog2(INS_ADDR_SIZE);
     localparam int DATA_ADDR = $clog2(DATA_ADDR_SIZE);
+    localparam int PHYS_REG_ADDR = $clog2(PHYS_REG_NUM);
+    localparam int ROB_INDEX = $clog2(ROB_ENTRY_NUM);
+    localparam int LSQ_INDEX = $clog2(LSQ_ENTRY_NUM);
 
     // Common scalar types shared across modules and interfaces.
     typedef logic [WORD_SIZE-1:0] word_t;
@@ -30,6 +44,10 @@ package TypesPkg;
     typedef logic [DATA_ADDR-1:0] data_addr_t;
     typedef logic [REG_ADDR-1:0] reg_addr_t;
     typedef logic [11:0] csr_addr_t;
+    typedef logic [PHYS_REG_ADDR-1:0] phys_reg_addr_t;
+    typedef logic [ROB_INDEX-1:0] rob_tag_t;
+    typedef logic [LSQ_INDEX-1:0] lsq_tag_t;
+    typedef logic [BPU_HISTORY_WIDTH-1:0] bpu_index_t;
     // Program counter and instruction addresses use full datapath width.
     typedef word_t instruction_addr_t;
 
@@ -38,6 +56,13 @@ package TypesPkg;
     localparam word_t UART_TX_ADDR = 32'h0000_FFE0;
     localparam word_t FROMHOST_ADDR = 32'h0000_FFF0;
     localparam word_t TOHOST_ADDR = 32'h0000_FFF8;
+
+    localparam logic [5:0] EXC_INSN_ADDR_MISALIGNED = 6'd0;
+    localparam logic [5:0] EXC_ILLEGAL_INSN         = 6'd2;
+    localparam logic [5:0] EXC_BREAKPOINT           = 6'd3;
+    localparam logic [5:0] EXC_LOAD_ADDR_MISALIGNED = 6'd4;
+    localparam logic [5:0] EXC_STORE_ADDR_MISALIGNED = 6'd6;
+    localparam logic [5:0] EXC_ECALL_MMODE          = 6'd11;
 
     // ALU control encoding selected by the decoder/controller path.
     typedef enum logic [3:0] {
@@ -82,7 +107,8 @@ package TypesPkg;
         BR_BLTU = 4'd5,
         BR_BGEU = 4'd6,
         BR_JAL  = 4'd7,
-        BR_JALR = 4'd8
+        BR_JALR = 4'd8,
+        BR_MRET = 4'd9
     } branch_ctr_t;
 
     // Load/store access type used by the data memory for sign/zero extension
@@ -94,5 +120,90 @@ package TypesPkg;
         MEM_BYTE_U = 3'b100,
         MEM_HALF_U = 3'b101
     } mem_access_t;
+
+    typedef enum logic [2:0] {
+        FU_INTEGER = 3'd0,
+        FU_BRANCH  = 3'd1,
+        FU_MEMORY  = 3'd2,
+        FU_CSR     = 3'd3
+    } fu_class_t;
+
+    // Micro-op format at the rename/dispatch boundary. Architectural source
+    // names have already been translated to physical-register tags here.
+    typedef struct packed {
+        logic              valid;
+        instruction_addr_t pc;
+        logic              predictedTaken;
+        instruction_addr_t predictedTarget;
+        bpu_index_t        predictorIndex;
+        logic [BPU_HISTORY_WIDTH-1:0] historySnapshot;
+        logic              predictedBtbHit;
+        logic              predictedRasUsed;
+        logic              isCall;
+        logic              isReturn;
+        fu_class_t         fuClass;
+        logic              registerWriteEnable;
+        logic              dataWriteEnable;
+        wb_select_t        wbSelect;
+        csr_op_t           csrOp;
+        csr_addr_t         csrAddr;
+        logic              csrUseImm;
+        word_t             csrImm;
+        branch_ctr_t       branchCtr;
+        alu_ctr_t          aluCtr;
+        mem_access_t       memCtr;
+        logic              aluSrcASelect;
+        logic              aluSrcBSelect;
+        logic              useRs1;
+        logic              useRs2;
+        phys_reg_addr_t    src1Phys;
+        phys_reg_addr_t    src2Phys;
+        logic              src1Ready;
+        logic              src2Ready;
+        phys_reg_addr_t    destPhys;
+        rob_tag_t          robTag;
+        lsq_tag_t          lsqTag;
+        instruction_addr_t immediate;
+        logic              decodeException;
+        logic [5:0]        decodeExceptionCause;
+        word_t             exceptionValue;
+        logic              serialize;
+        logic              mret;
+    } renamed_uop_t;
+
+    // ROB state does not carry ordinary result data: completed integer results
+    // live in the PRF. The ROB records ordering and retirement metadata.
+    typedef struct packed {
+        logic              valid;
+        logic              complete;
+        instruction_addr_t pc;
+        logic              writesRd;
+        reg_addr_t         archRd;
+        phys_reg_addr_t    newPhys;
+        phys_reg_addr_t    oldPhys;
+        logic              isMemory;
+        lsq_tag_t          lsqTag;
+        logic              isStore;
+        logic              isBranch;
+        logic              isCsr;
+        logic              exception;
+        logic [5:0]        exceptionCause;
+        word_t             exceptionValue;
+        logic              mret;
+    } rob_entry_t;
+
+    typedef struct packed {
+        logic              valid;
+        logic              isLoad;
+        logic              isStore;
+        rob_tag_t          robTag;
+        phys_reg_addr_t    destPhys;
+        mem_access_t       memCtr;
+        instruction_addr_t pc;
+        logic              addressReady;
+        word_t             address;
+        logic              dataReady;
+        word_t             storeData;
+    } lsq_entry_t;
 
 endpackage

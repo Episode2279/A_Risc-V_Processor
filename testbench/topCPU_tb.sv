@@ -143,7 +143,18 @@ module topCPU_tb #(
         .dbg_wb1_wbSelect(),
         .dbg_wb1_aluSrc(),
         .dbg_wb1_rdData(),
-        .dbg_wb1_dataWb()
+        .dbg_wb1_dataWb(),
+        .dbg_robCount(),
+        .dbg_issueCount(),
+        .dbg_lsqCount(),
+        .dbg_perfDualIssueCycles(), .dbg_perfSingleIssueCycles(), .dbg_perfIqNoReadyCycles(),
+        .dbg_perfPort0LsuBlockedCycles(), .dbg_perfPort0BranchBlockedCycles(),
+        .dbg_perfRobFullCycles(), .dbg_perfIqFullCycles(), .dbg_perfLsqFullCycles(),
+        .dbg_perfPrfEmptyCycles(), .dbg_perfBranchCount(), .dbg_perfBranchMispredictCount(),
+        .dbg_perfJumpSerializationCycles()
+        ,.dbg_perfConditionalCount(),.dbg_perfConditionalMispredictCount(),
+        .dbg_perfDirectionMispredictCount(),.dbg_perfTargetMispredictCount(),.dbg_perfBtbMissCount(),
+        .dbg_perfJalMispredictCount(),.dbg_perfJalrMispredictCount(),.dbg_perfRasMissCount()
 `endif
     );
 

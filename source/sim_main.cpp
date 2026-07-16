@@ -373,11 +373,43 @@ int main(int argc, char** argv) {
 
   log_both(log_file,
            "\n***** Verilator simulation finished *****\n"
-           "cycles=%llu toHost=0x%08x pc=0x%08x instruction=0x%08x\n",
+           "cycles=%llu toHost=0x%08x pc=0x%08x instruction=0x%08x "
+           "rob=%u issue=%u lsq=%u\n",
            (unsigned long long)cycle_count,
            tohost,
            (uint32_t)topCPU->checkPC,
-           (uint32_t)topCPU->check);
+           (uint32_t)topCPU->check,
+           (unsigned)topCPU->dbg_robCount,
+           (unsigned)topCPU->dbg_issueCount,
+           (unsigned)topCPU->dbg_lsqCount);
+  log_both(log_file,
+           "PERF issue_dual=%llu issue_single=%llu iq_no_ready=%llu "
+           "port0_lsu_blocked=%llu port0_branch_blocked=%llu\n"
+           "PERF rob_full=%llu iq_full=%llu lsq_full=%llu prf_empty=%llu "
+           "branches=%llu mispredicts=%llu jump_serialize=%llu\n",
+           (unsigned long long)topCPU->dbg_perfDualIssueCycles,
+           (unsigned long long)topCPU->dbg_perfSingleIssueCycles,
+           (unsigned long long)topCPU->dbg_perfIqNoReadyCycles,
+           (unsigned long long)topCPU->dbg_perfPort0LsuBlockedCycles,
+           (unsigned long long)topCPU->dbg_perfPort0BranchBlockedCycles,
+           (unsigned long long)topCPU->dbg_perfRobFullCycles,
+           (unsigned long long)topCPU->dbg_perfIqFullCycles,
+           (unsigned long long)topCPU->dbg_perfLsqFullCycles,
+           (unsigned long long)topCPU->dbg_perfPrfEmptyCycles,
+           (unsigned long long)topCPU->dbg_perfBranchCount,
+           (unsigned long long)topCPU->dbg_perfBranchMispredictCount,
+           (unsigned long long)topCPU->dbg_perfJumpSerializationCycles);
+  log_both(log_file,
+           "BPU conditional=%llu conditional_misp=%llu direction_misp=%llu target_misp=%llu "
+           "btb_miss=%llu jal_misp=%llu jalr_misp=%llu ras_miss=%llu\n",
+           (unsigned long long)topCPU->dbg_perfConditionalCount,
+           (unsigned long long)topCPU->dbg_perfConditionalMispredictCount,
+           (unsigned long long)topCPU->dbg_perfDirectionMispredictCount,
+           (unsigned long long)topCPU->dbg_perfTargetMispredictCount,
+           (unsigned long long)topCPU->dbg_perfBtbMissCount,
+           (unsigned long long)topCPU->dbg_perfJalMispredictCount,
+           (unsigned long long)topCPU->dbg_perfJalrMispredictCount,
+           (unsigned long long)topCPU->dbg_perfRasMissCount);
 
   int exit_code = 0;
   if (timed_out) {

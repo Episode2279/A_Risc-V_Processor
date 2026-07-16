@@ -1,0 +1,8 @@
+name: a-riscv-processor-rv32i
+compiler_exe: ../../.tools/riscv-gcc-15/bin/riscv-none-elf-gcc
+objdump_exe: ../../.tools/riscv-gcc-15/bin/riscv-none-elf-objdump
+ref_model_exe: sail_riscv_sim
+udb_config: a-riscv-processor-rv32i.yaml
+linker_script: link.ld
+dut_include_dir: .
+include_priv_tests: False

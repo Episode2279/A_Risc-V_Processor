@@ -5,6 +5,12 @@ interface IdExeBusIf;
     // metadata so hazard detection and forwarding do not need to re-decode insn.
     logic              valid;
     instruction_addr_t pc;
+    logic              predictedTaken;
+    instruction_addr_t predictedTarget;
+    bpu_index_t        predictorIndex;
+    logic [BPU_HISTORY_WIDTH-1:0] historySnapshot;
+    logic predictedBtbHit;
+    logic predictedRasUsed;
     // Architectural side effects selected in decode.
     logic              registerWriteEnable;
     logic              dataWriteEnable;
@@ -32,11 +38,21 @@ interface IdExeBusIf;
     reg_addr_t         regB;
     reg_addr_t         rd;
     instruction_addr_t immediate;
+    logic              decodeException;
+    logic [5:0]        decodeExceptionCause;
+    word_t             exceptionValue;
+    logic              serialize;
+    logic              mret;
 
     // Driven by IdStages/Decoder. Register data is attached separately by the
     // top-level register file before entering ID/EX.
     modport decode(
         output pc,
+        output predictedTaken,
+        output predictedTarget,
+        output predictorIndex,
+        output historySnapshot,
+        output predictedBtbHit, predictedRasUsed,
         output valid,
         output registerWriteEnable,
         output dataWriteEnable,
@@ -56,11 +72,21 @@ interface IdExeBusIf;
         output regB,
         output rd,
         output immediate
+        ,output decodeException
+        ,output decodeExceptionCause
+        ,output exceptionValue
+        ,output serialize
+        ,output mret
     );
 
     // Consumed by the ID/EX pipeline register.
     modport register_in(
         input pc,
+        input predictedTaken,
+        input predictedTarget,
+        input predictorIndex,
+        input historySnapshot,
+        input predictedBtbHit, predictedRasUsed,
         input valid,
         input registerWriteEnable,
         input dataWriteEnable,
@@ -82,11 +108,21 @@ interface IdExeBusIf;
         input regB,
         input rd,
         input immediate
+        ,input decodeException
+        ,input decodeExceptionCause
+        ,input exceptionValue
+        ,input serialize
+        ,input mret
     );
 
     // Driven by the ID/EX pipeline register.
     modport register_out(
         output pc,
+        output predictedTaken,
+        output predictedTarget,
+        output predictorIndex,
+        output historySnapshot,
+        output predictedBtbHit, predictedRasUsed,
         output valid,
         output registerWriteEnable,
         output dataWriteEnable,
@@ -108,11 +144,21 @@ interface IdExeBusIf;
         output regB,
         output rd,
         output immediate
+        ,output decodeException
+        ,output decodeExceptionCause
+        ,output exceptionValue
+        ,output serialize
+        ,output mret
     );
 
     // Read-only view for stages/helpers that inspect an already-formed bus.
     modport sink(
         input pc,
+        input predictedTaken,
+        input predictedTarget,
+        input predictorIndex,
+        input historySnapshot,
+        input predictedBtbHit, predictedRasUsed,
         input valid,
         input registerWriteEnable,
         input dataWriteEnable,
@@ -134,5 +180,10 @@ interface IdExeBusIf;
         input regB,
         input rd,
         input immediate
+        ,input decodeException
+        ,input decodeExceptionCause
+        ,input exceptionValue
+        ,input serialize
+        ,input mret
     );
 endinterface

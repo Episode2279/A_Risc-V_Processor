@@ -40,6 +40,7 @@ module dataMem
     logic                 uartHit;
     logic                 fromHostHit;
     logic                 toHostHit;
+    string                runtimeMemFile;
 
     function automatic logic [DATA_W-1:0] format_load(
         input logic [DATA_W-1:0] rawWord,
@@ -118,7 +119,10 @@ module dataMem
 
     initial begin
         // Simulation initialization from one-word-per-line hex data.
-        $readmemh(MEM_FILE, mem);
+        if ($value$plusargs("data-mem=%s", runtimeMemFile))
+            $readmemh(runtimeMemFile, mem);
+        else
+            $readmemh(MEM_FILE, mem);
     end
 
     always_comb begin

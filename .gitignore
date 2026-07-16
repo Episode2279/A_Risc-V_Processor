@@ -1,0 +1,14 @@
+source/obj_dir/
+source/obj_dir_ooo/
+source/obj_dir_ooo_backend/
+source/obj_dir_bpu/
+source/obj_dir_rv32i/
+source/obj_dir_act4/
+source/wave.vcd
+source/simulation_output.txt
+source/topCPU_tb_output.txt
+source/topCPU_tb_debug.txt
+source/topCPU_tb_konata.trace
+.tools/
+compliance/act4/work/
+third_party/riscv-arch-test/work/

@@ -17,12 +17,17 @@ module CSRFile
     input  csr_op_t   csrOp_i,
     input  csr_addr_t csrAddr_i,
     input  word_t     csrWriteData_i,
-    output word_t     csrReadData_o
+    output word_t     csrReadData_o,
+    input  logic      trapValid_i,
+    input  instruction_addr_t trapPc_i,
+    input  logic [5:0] trapCause_i,
+    input  word_t     trapValue_i,
+    input  logic      mret_i,
+    output instruction_addr_t trapVector_o
 );
 
     // CSR addresses used by the current bare-metal tests. This file implements
-    // the commonly needed machine counters and machine-mode software CSRs, but
-    // it does not yet implement trap entry/return side effects.
+    // the commonly needed machine counters and machine-mode trap state.
     localparam csr_addr_t CSR_CYCLE    = 12'hC00;
     localparam csr_addr_t CSR_TIME     = 12'hC01;
     localparam csr_addr_t CSR_INSTRET  = 12'hC02;
@@ -93,6 +98,7 @@ module CSRFile
     end
 
     assign csrReadData_o = currentValue;
+    assign trapVector_o = {mtvec[31:2], 2'b00};
 
     always_ff @(posedge clk or negedge rst) begin
         if (!rst) begin
@@ -116,7 +122,20 @@ module CSRFile
                 minstret <= minstret + {62'd0, retireCount_i};
             end
 
-            if (csrValid_i && (csrOp_i != CSR_NONE)) begin
+            if (trapValid_i) begin
+                mepc <= {trapPc_i[31:2], 2'b00};
+                mcause <= {26'd0, trapCause_i};
+                mtval <= trapValue_i;
+                // Machine trap entry: MPIE <- MIE, MIE <- 0, MPP <- M.
+                mstatus[7] <= mstatus[3];
+                mstatus[3] <= 1'b0;
+                mstatus[12:11] <= 2'b11;
+            end else if (mret_i) begin
+                // Machine return: MIE <- MPIE, MPIE <- 1, MPP <- U.
+                mstatus[3] <= mstatus[7];
+                mstatus[7] <= 1'b1;
+                mstatus[12:11] <= 2'b00;
+            end else if (csrValid_i && (csrOp_i != CSR_NONE)) begin
                 // Only writable CSRs update. Unknown or read-only IDs simply
                 // ignore writes, which is sufficient for the current tests.
                 unique case (csrAddr_i)

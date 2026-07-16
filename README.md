@@ -1,6 +1,26 @@
 # A_Risc-V_Processor
 
-RV32I-style pipelined RISC-V processor written in SystemVerilog.
+PRF-based, out-of-order RV32I-style RISC-V processor written in SystemVerilog.
+
+`topCPU` now uses the out-of-order architecture as its only executable core:
+dual fetch/decode feeds register rename, a unified dual-issue queue, physical
+register file, reorder buffer, load/store queue, execution, and in-order retirement.
+The former sequential execute/memory/writeback pipeline has been removed.
+
+The RV32I path now performs strict illegal-instruction decoding, serializes
+FENCE, and takes precise ROB-head traps for ECALL, EBREAK, instruction-address
+misalignment, and load/store-address misalignment. Basic machine trap entry and
+MRET are implemented. Run `make rv32i-compliance-smoke` for the directed suite.
+The official ACT4 RV32I I-extension suite passes all 39 generated self-checking
+tests; its configuration and runner live under `compliance/`.
+
+The unified scheduler can issue two integer operations or pair one integer with
+a branch/CSR/memory operation. Loads can
+pass known non-aliasing Stores and receive Store-to-Load forwarding; Stores
+become externally visible only at ROB retirement. Branch and CSR operations use
+the ROB/PRF path but remain temporarily serialized.
+See `source/functional/OoO/README.md` for implemented invariants and remaining
+performance work.
 
 The project includes a Verilator simulation flow, a Vivado-oriented SystemVerilog
 testbench, CoreMark bare-metal software, memory-image generation, UART MMIO
@@ -58,6 +78,8 @@ toHost=0x00000001
 make help            # Show available targets
 make coremark        # Rebuild CoreMark ELF and memory images only
 make lint            # Verilator lint for RTL plus SV testbench
+make ooo-smoke       # Test RAT/PRF/ROB/IQ/LSQ structures
+make ooo-backend-smoke # Test OoO dispatch/execute/commit behavior
 make build           # Build the Verilated topCPU executable
 make run             # Run the existing Verilated executable
 make sim             # coremark + lint + build + run
@@ -141,13 +163,15 @@ Key source directories:
 - `source/topCPU.sv`: top-level CPU composition
 - `source/TypesPkg.sv`: shared types, widths, memory sizes, MMIO addresses
 - `source/interfaces`: SystemVerilog bus interfaces/modports
-- `source/functional/if`: IF-stage helper units
-- `source/functional/id`: decode and hazard helper units
-- `source/functional/exe`: ALU, branch, and forwarding units
-- `source/functional/wb`: writeback helper units
+- `source/functional/id`: instruction decoding
+- `source/functional/rename`: RAT, committed map, physical free list, and dispatch
+- `source/functional/issue`: physical-tag issue queue and wakeup/select logic
+- `source/functional/exe`: ALU, OoO execution, branch resolution, and CSR state
+- `source/functional/mem`: LSQ and load/store execution mechanisms
+- `source/functional/OoO`: ROB, PRF, and out-of-order architecture notes
 - `source/memory`: instruction/data memories and MMIO behavior
-- `source/pipeRegisters`: pipeline registers
-- `source/pipeStages`: pipeline stage wrappers/adapters
+- `source/frontEnd`: dual fetch/decode wrappers and the IF/ID register
+- `source/backEnd`: OoO backend and memory/MMIO stage wrappers
 - `coremark`: bare-metal CoreMark port and linker script
 
 ## Notes

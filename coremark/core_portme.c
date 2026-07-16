@@ -164,6 +164,7 @@ int ee_printf(const char *fmt, ...) {
  * real elapsed core cycles instead of using a placeholder duration.
  */
 static CORE_TICKS t0 = 0, t1 = 0;
+static uint32_t instret0 = 0, instret1 = 0;
 
 static inline CORE_TICKS read_cycle32(void) {
     CORE_TICKS value;
@@ -173,8 +174,21 @@ static inline CORE_TICKS read_cycle32(void) {
     return value;
 }
 
-void start_time(void) { t0 = read_cycle32(); }
-void stop_time(void)  { t1 = read_cycle32(); }
+static inline uint32_t read_instret32(void) {
+    uint32_t value;
+    __asm__ volatile ("rdinstret %0" : "=r"(value));
+    return value;
+}
+
+void start_time(void) {
+    t0 = read_cycle32();
+    instret0 = read_instret32();
+}
+
+void stop_time(void) {
+    t1 = read_cycle32();
+    instret1 = read_instret32();
+}
 CORE_TICKS get_time(void) { return (CORE_TICKS)(t1 - t0); }
 
 secs_ret time_in_secs(CORE_TICKS ticks) {
@@ -247,7 +261,23 @@ void portable_init(core_portable *p, int *argc, char *argv[]) {
 }
 
 void portable_fini(core_portable *p) {
+    uint32_t measured_cycles = (uint32_t)(t1 - t0);
+    uint32_t retired_instructions = instret1 - instret0;
+    uint32_t ipc_x10000 = 0;
+
     (void)p;
+    if (measured_cycles != 0u) {
+        ipc_x10000 = (uint32_t)((((uint64_t)retired_instructions * 10000u)
+                                + (measured_cycles / 2u))
+                               / measured_cycles);
+    }
+    uart_puts("[coremark] Retired instructions = ");
+    uart_put_unsigned(retired_instructions, 10u, 0, ' ');
+    uart_puts("\n[coremark] Measured IPC = ");
+    uart_put_unsigned(ipc_x10000 / 10000u, 10u, 0, ' ');
+    uart_putc('.');
+    uart_put_unsigned(ipc_x10000 % 10000u, 10u, 4, '0');
+    uart_putc('\n');
     uart_puts("[coremark] Benchmark finished, signaling tohost=1\n");
     // The testbench treats tohost=1 as success and stops the simulation. The
     // infinite loop models bare-metal software handing control back to the

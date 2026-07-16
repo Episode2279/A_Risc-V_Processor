@@ -30,7 +30,12 @@ module Decoder
     output logic [REG_ADDR_W-1:0]  rs1,
     output logic [REG_ADDR_W-1:0]  rs2,
     output logic [REG_ADDR_W-1:0]  rd,
-    output logic [IMM_W-1:0]       immediate
+    output logic [IMM_W-1:0]       immediate,
+    output logic                   decodeException,
+    output logic [5:0]             decodeExceptionCause,
+    output logic [IMM_W-1:0]       exceptionValue,
+    output logic                   serialize,
+    output logic                   mret
 );
 
     logic [6:0] opcode;
@@ -84,9 +89,15 @@ module Decoder
         aluSrcBSelect = 1'b0;
         useRs1 = 1'b0;
         useRs2 = 1'b0;
+        decodeException = 1'b1;
+        decodeExceptionCause = EXC_ILLEGAL_INSN;
+        exceptionValue = insn;
+        serialize = 1'b0;
+        mret = 1'b0;
 
         unique case (opcode)
             7'b0110011: begin
+                decodeException = 1'b0;
                 // opcode 0110011: R-type integer register-register operations.
                 // Format:
                 //   [31:25] funct7, [24:20] rs2, [19:15] rs1,
@@ -115,11 +126,12 @@ module Decoder
                     10'b0100000_101: aluCtr = ALU_SRA;  // SRA, arithmetic right shift
                     10'b0000000_110: aluCtr = ALU_OR;   // OR
                     10'b0000000_111: aluCtr = ALU_AND;  // AND
-                    default: registerWriteEnable = 1'b0;
+                    default: begin registerWriteEnable = 1'b0; decodeException = 1'b1; end
                 endcase
             end
 
             7'b0010011: begin
+                decodeException = 1'b0;
                 // opcode 0010011: I-type integer immediate operations.
                 // Format:
                 //   [31:20] imm[11:0], [19:15] rs1, [14:12] funct3,
@@ -149,6 +161,7 @@ module Decoder
                             immediate = {27'd0, insn[24:20]};
                         end else begin
                             registerWriteEnable = 1'b0;
+                            decodeException = 1'b1;
                         end
                     end
                     3'b101: begin
@@ -161,13 +174,15 @@ module Decoder
                             aluCtr = ALU_SRA;
                         end else begin
                             registerWriteEnable = 1'b0;
+                            decodeException = 1'b1;
                         end
                     end
-                    default: registerWriteEnable = 1'b0;
+                    default: begin registerWriteEnable = 1'b0; decodeException = 1'b1; end
                 endcase
             end
 
             7'b0000011: begin
+                decodeException = 1'b0;
                 // opcode 0000011: I-type loads.
                 // Format:
                 //   [31:20] imm[11:0], [19:15] rs1, [14:12] funct3,
@@ -189,11 +204,12 @@ module Decoder
                     3'b010: memCtr = MEM_WORD;   // LW
                     3'b100: memCtr = MEM_BYTE_U; // LBU, zero-extend byte
                     3'b101: memCtr = MEM_HALF_U; // LHU, zero-extend halfword
-                    default: registerWriteEnable = 1'b0;
+                    default: begin registerWriteEnable = 1'b0; decodeException = 1'b1; end
                 endcase
             end
 
             7'b0100011: begin
+                decodeException = 1'b0;
                 // opcode 0100011: S-type stores.
                 // Format:
                 //   [31:25] imm[11:5], [24:20] rs2, [19:15] rs1,
@@ -213,11 +229,12 @@ module Decoder
                     3'b000: memCtr = MEM_BYTE; // SB
                     3'b001: memCtr = MEM_HALF; // SH
                     3'b010: memCtr = MEM_WORD; // SW
-                    default: dataWriteEnable = 1'b0;
+                    default: begin dataWriteEnable = 1'b0; decodeException = 1'b1; end
                 endcase
             end
 
             7'b1100011: begin
+                decodeException = 1'b0;
                 // opcode 1100011: B-type conditional branches.
                 // Format:
                 //   [31] imm[12], [30:25] imm[10:5], [24:20] rs2,
@@ -243,11 +260,12 @@ module Decoder
                     3'b101: branchCtr = BR_BGE;  // Signed greater/equal
                     3'b110: branchCtr = BR_BLTU; // Unsigned less-than
                     3'b111: branchCtr = BR_BGEU; // Unsigned greater/equal
-                    default: branchCtr = BR_NONE;
+                    default: begin branchCtr = BR_NONE; decodeException = 1'b1; end
                 endcase
             end
 
             7'b1101111: begin
+                decodeException = 1'b0;
                 // opcode 1101111: J-type JAL.
                 // Format:
                 //   [31] imm[20], [30:21] imm[10:1], [20] imm[11],
@@ -274,6 +292,7 @@ module Decoder
                 //   rd = pc + 4; pc = (rs1 + sign_extend(imm)) & ~1
                 // funct3 must be 000 for valid RV32I JALR.
                 if (funct3 == 3'b000) begin
+                    decodeException = 1'b0;
                     registerWriteEnable = 1'b1;
                     wbSelect = WB_PC4;
                     branchCtr = BR_JALR;
@@ -285,6 +304,7 @@ module Decoder
             end
 
             7'b0110111: begin
+                decodeException = 1'b0;
                 // opcode 0110111: U-type LUI.
                 // Format:
                 //   [31:12] imm[31:12], [11:7] rd, [6:0] opcode
@@ -297,6 +317,7 @@ module Decoder
             end
 
             7'b0010111: begin
+                decodeException = 1'b0;
                 // opcode 0010111: U-type AUIPC.
                 // Format:
                 //   [31:12] imm[31:12], [11:7] rd, [6:0] opcode
@@ -311,6 +332,20 @@ module Decoder
                 immediate = {insn[31:12], 12'b0};
             end
 
+            7'b0001111: begin
+                // With static instruction memory, FENCE and FENCE.I both act
+                // as serialized ordering points. FENCE.I additionally requires
+                // rd=rs1=0 and an all-zero immediate encoding.
+                if (funct3 == 3'b000) begin
+                    decodeException = 1'b0;
+                    serialize = 1'b1;
+                end else if ((funct3 == 3'b001) && (rd == '0) &&
+                             (rs1 == '0) && (insn[31:20] == 12'd0)) begin
+                    decodeException = 1'b0;
+                    serialize = 1'b1;
+                end
+            end
+
             7'b1110011: begin
                 // opcode 1110011: SYSTEM/CSR instructions.
                 // This decoder implements the Zicsr CSR forms used by tests:
@@ -322,37 +357,70 @@ module Decoder
                 // funct3 selects:
                 //   001 CSRRW, 010 CSRRS, 011 CSRRC,
                 //   101 CSRRWI, 110 CSRRSI, 111 CSRRCI.
-                wbSelect = WB_CSR;
-                registerWriteEnable = (rd != '0);
                 immediate = '0;
 
                 unique case (funct3)
+                    3'b000: begin
+                        serialize = 1'b1;
+                        if (insn == 32'h0000_0073) begin
+                            decodeException = 1'b1;
+                            decodeExceptionCause = EXC_ECALL_MMODE;
+                            exceptionValue = '0;
+                        end else if (insn == 32'h0010_0073) begin
+                            decodeException = 1'b1;
+                            decodeExceptionCause = EXC_BREAKPOINT;
+                            exceptionValue = '0;
+                        end else if (insn == 32'h3020_0073) begin
+                            decodeException = 1'b0;
+                            mret = 1'b1;
+                            branchCtr = BR_MRET;
+                            csrAddr = 12'h341;
+                        end
+                    end
                     3'b001: begin
+                        decodeException = 1'b0;
+                        wbSelect = WB_CSR;
+                        registerWriteEnable = (rd != '0);
                         // CSRRW: always write rs1 value to CSR.
                         csrOp = CSR_RW;
                         useRs1 = 1'b1;
                     end
                     3'b010: begin
+                        decodeException = 1'b0;
+                        wbSelect = WB_CSR;
+                        registerWriteEnable = (rd != '0);
                         // CSRRS with rs1=x0 is a pure CSR read.
                         csrOp = (rs1 == '0) ? CSR_NONE : CSR_RS;
                         useRs1 = (rs1 != '0);
                     end
                     3'b011: begin
+                        decodeException = 1'b0;
+                        wbSelect = WB_CSR;
+                        registerWriteEnable = (rd != '0);
                         // CSRRC with rs1=x0 is a pure CSR read.
                         csrOp = (rs1 == '0) ? CSR_NONE : CSR_RC;
                         useRs1 = (rs1 != '0);
                     end
                     3'b101: begin
+                        decodeException = 1'b0;
+                        wbSelect = WB_CSR;
+                        registerWriteEnable = (rd != '0);
                         // CSRRWI writes the zero-extended zimm field.
                         csrOp = CSR_RW;
                         csrUseImm = 1'b1;
                     end
                     3'b110: begin
+                        decodeException = 1'b0;
+                        wbSelect = WB_CSR;
+                        registerWriteEnable = (rd != '0);
                         // CSRRSI with zimm=0 is a pure CSR read.
                         csrOp = (insn[19:15] == 5'd0) ? CSR_NONE : CSR_RS;
                         csrUseImm = 1'b1;
                     end
                     3'b111: begin
+                        decodeException = 1'b0;
+                        wbSelect = WB_CSR;
+                        registerWriteEnable = (rd != '0);
                         // CSRRCI with zimm=0 is a pure CSR read.
                         csrOp = (insn[19:15] == 5'd0) ? CSR_NONE : CSR_RC;
                         csrUseImm = 1'b1;
