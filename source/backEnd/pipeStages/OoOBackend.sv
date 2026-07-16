@@ -87,8 +87,8 @@ module OoOBackend
     logic recoveryValid;
     rob_tag_t recoveryTag;
     logic [ROB_ENTRY_NUM-1:0] recoveryYoungerMask;
-    logic integerHasOlderUnresolvedBranch;
     logic integerOrderingReady;
+    logic branchIssueLane;
 
     logic [1:0] robAllocReady;
     logic [1:0] robAllocValid;
@@ -180,7 +180,7 @@ module OoOBackend
         laneSupported[0] = !serializing &&
             (!laneNeedsDrained[0] || backendDrained);
         laneSupported[1] = !serializing &&
-                           !laneIsControl[0] && !laneIsControl[1] &&
+                           !laneIsControl[1] &&
                            !laneStartsSerialization[1];
     end
 
@@ -227,10 +227,8 @@ module OoOBackend
 
         issueCount_o = issueCount;
         recoveryValid = branchMispredicted_o;
-        recoveryTag = issueUop[0].robTag;
-        integerOrderingReady = !issueValid[0] ||
-            (issueUop[0].fuClass != FU_BRANCH) ||
-            !integerHasOlderUnresolvedBranch;
+        recoveryTag = branchRobTag_o;
+        integerOrderingReady = 1'b1;
     end
 
     BackendCommitStage commitStage (
@@ -325,10 +323,8 @@ module OoOBackend
         .recoverValid_i(recoveryValid),
         .recoverTag_i(recoveryTag),
         .recoverYoungerMask_o(recoveryYoungerMask),
-        .queryBranchValid_i(issueValid[0] &&
-                            (issueUop[0].fuClass == FU_BRANCH)),
-        .queryBranchTag_i(issueUop[0].robTag),
-        .queryHasOlderUnresolvedBranch_o(integerHasOlderUnresolvedBranch),
+        .queryBranchValid_i(1'b0), .queryBranchTag_i('0),
+        .queryHasOlderUnresolvedBranch_o(),
         .allocValid_i(robAllocValid),
         .allocEntry_i(renameRobEntry),
         .allocReady_o(robAllocReady),
@@ -371,13 +367,13 @@ module OoOBackend
         .iqFull_i(issueFull), .lsqFull_i(lsqFull), .prfEmpty_i(freePhysCount == 0),
         .branchResolved_i(branchResolved_o), .branchMispredicted_i(branchMispredicted_o),
         .branchConditional_i(branchIsConditional_o),
-        .branchDirectionMispredict_i(branchIsConditional_o && (issueUop[0].predictedTaken != branchTaken_o)),
-        .branchTargetMispredict_i(branchTaken_o && issueUop[0].predictedTaken &&
-            (issueUop[0].predictedTarget != branchTarget_o)),
-        .branchBtbMiss_i(branchTaken_o && !issueUop[0].predictedBtbHit &&
-            !issueUop[0].predictedRasUsed && (issueUop[0].branchCtr != BR_JAL)),
-        .branchJal_i(issueUop[0].branchCtr == BR_JAL), .branchJalr_i(issueUop[0].branchCtr == BR_JALR),
-        .branchRasMiss_i(issueUop[0].isReturn && (!issueUop[0].predictedRasUsed || branchMispredicted_o)),
+        .branchDirectionMispredict_i(branchIsConditional_o && (issueUop[branchIssueLane].predictedTaken != branchTaken_o)),
+        .branchTargetMispredict_i(branchTaken_o && issueUop[branchIssueLane].predictedTaken &&
+            (issueUop[branchIssueLane].predictedTarget != branchTarget_o)),
+        .branchBtbMiss_i(branchTaken_o && !issueUop[branchIssueLane].predictedBtbHit &&
+            !issueUop[branchIssueLane].predictedRasUsed && (issueUop[branchIssueLane].branchCtr != BR_JAL)),
+        .branchJal_i(issueUop[branchIssueLane].branchCtr == BR_JAL), .branchJalr_i(issueUop[branchIssueLane].branchCtr == BR_JALR),
+        .branchRasMiss_i(issueUop[branchIssueLane].isReturn && (!issueUop[branchIssueLane].predictedRasUsed || branchMispredicted_o)),
         .jumpSerializing_i(jumpSerializing), .dualIssueCycles_o(perfDualIssueCycles_o),
         .singleIssueCycles_o(perfSingleIssueCycles_o), .iqNoReadyCycles_o(perfIqNoReadyCycles_o),
         .port0LsuBlockedCycles_o(perfPort0LsuBlockedCycles_o),
@@ -498,7 +494,8 @@ module OoOBackend
 
 */
     BackendExecuteStage executeStage (
-        .clk(clk), .rst(rst), .flush_i(flush_i), .recoverValid_i(1'b0),
+        .clk(clk), .rst(rst), .flush_i(flush_i), .recoverValid_i(recoveryValid),
+        .recoverYoungerMask_i(recoveryYoungerMask),
         .issueValid_i(issueValid), .issueUop_i(issueUop),
         .sourceA_i(executeSourceA), .sourceB_i(executeSourceB),
         .csrReadData_i(csrReadData_i), .integerOrderingReady_i(integerOrderingReady),
@@ -515,6 +512,7 @@ module OoOBackend
         .branchTaken_o(branchTaken_o), .branchTarget_o(branchTarget_o),
         .branchMispredicted_o(branchMispredicted_o), .branchRedirect_o(branchRedirect_o),
         .branchRobTag_o(branchRobTag_o),
+        .branchLane_o(branchIssueLane),
         .csrValid_o(csrValid_o), .csrOp_o(csrOp_o), .csrAddr_o(csrAddr_o),
         .csrWriteData_o(csrWriteData_o), .lsuExecuteValid_o(lsuExecuteValid),
         .lsuLoadReadValid_o(lsuLoadReadValid), .lsuIsStore_o(lsuIsStore),

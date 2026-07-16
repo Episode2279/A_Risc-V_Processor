@@ -46,7 +46,6 @@ module IssueQueue
     integer seqDispatchRank;
     logic [AGE_W-1:0] selectedAge [ISSUE_WIDTH];
     logic readyEntry [DEPTH];
-    logic hasReadySpecial;
 
     function automatic logic sourceReadyNow(
         input phys_reg_addr_t sourcePhys,
@@ -102,7 +101,6 @@ module IssueQueue
             issueValid_o[combLane] = 1'b0;
             issueUop_o[combLane] = '0;
         end
-        hasReadySpecial = 1'b0;
         for (combEntryIndex = 0; combEntryIndex < DEPTH; combEntryIndex = combEntryIndex + 1) begin
             readyEntry[combEntryIndex] = entries[combEntryIndex].valid &&
                 sourceReadyNow(entries[combEntryIndex].src1Phys,
@@ -111,33 +109,62 @@ module IssueQueue
                 sourceReadyNow(entries[combEntryIndex].src2Phys,
                                entries[combEntryIndex].src2Ready,
                                entries[combEntryIndex].useRs2);
-            if (readyEntry[combEntryIndex] &&
-                (entries[combEntryIndex].fuClass != FU_INTEGER))
-                hasReadySpecial = 1'b1;
         end
 
-        // Port 0 accepts every FU class.  When possible, reserve it for a
-        // branch/CSR/memory uop because port 1 is an integer-only ALU.  This
-        // forms useful special+integer pairs instead of stranding the special
-        // uop behind the port restriction.
+        // Reserve port 0 for memory/CSR when one is ready. Port 1 has its own
+        // branch-capable integer unit, allowing LSU+branch in one cycle.
         for (combEntryIndex = 0; combEntryIndex < DEPTH; combEntryIndex = combEntryIndex + 1) begin
             if (readyEntry[combEntryIndex] &&
-                (!hasReadySpecial || (entries[combEntryIndex].fuClass != FU_INTEGER)) &&
+                ((entries[combEntryIndex].fuClass == FU_MEMORY) ||
+                 (entries[combEntryIndex].fuClass == FU_CSR)) &&
                 ((selectedIndex[0] < 0) || (ages[combEntryIndex] < selectedAge[0]))) begin
                 selectedIndex[0] = combEntryIndex;
                 selectedAge[0] = ages[combEntryIndex];
             end
         end
 
-        // Port 1 accepts only ordinary integer uops and never selects the same
-        // entry as port 0.
+        // Port 1 accepts integer or branch uops and selects strictly by age.
+        // With multiple unresolved branches allowed, an older integer
+        // producer must not be stranded behind a younger ready branch.
         for (combEntryIndex = 0; combEntryIndex < DEPTH; combEntryIndex = combEntryIndex + 1) begin
             if (readyEntry[combEntryIndex] &&
-                (entries[combEntryIndex].fuClass == FU_INTEGER) &&
+                ((entries[combEntryIndex].fuClass == FU_INTEGER) ||
+                 (entries[combEntryIndex].fuClass == FU_BRANCH)) &&
                 (combEntryIndex != selectedIndex[0]) &&
                 ((selectedIndex[1] < 0) || (ages[combEntryIndex] < selectedAge[1]))) begin
                 selectedIndex[1] = combEntryIndex;
                 selectedAge[1] = ages[combEntryIndex];
+            end
+        end
+
+        // Fill an unused port 0 with the oldest remaining ready uop. If port
+        // 1 already owns a branch, port 0 excludes other branches.
+        if (selectedIndex[0] < 0) begin
+            for (combEntryIndex = 0; combEntryIndex < DEPTH; combEntryIndex = combEntryIndex + 1) begin
+                if (readyEntry[combEntryIndex] && (combEntryIndex != selectedIndex[1]) &&
+                    !((selectedIndex[1] >= 0) && (entries[combEntryIndex].fuClass == FU_BRANCH)) &&
+                    ((selectedIndex[0] < 0) || (ages[combEntryIndex] < selectedAge[0]))) begin
+                    selectedIndex[0] = combEntryIndex;
+                    selectedAge[0] = ages[combEntryIndex];
+                end
+            end
+        end
+
+        // If no branch used port 1, fill it with an integer uop, or with a
+        // branch when port 0 did not select one.
+        if (selectedIndex[1] < 0) begin
+            for (combEntryIndex = 0; combEntryIndex < DEPTH; combEntryIndex = combEntryIndex + 1) begin
+                if (readyEntry[combEntryIndex] &&
+                    ((entries[combEntryIndex].fuClass == FU_INTEGER) ||
+                     (entries[combEntryIndex].fuClass == FU_BRANCH)) &&
+                    (combEntryIndex != selectedIndex[0]) &&
+                    !((selectedIndex[0] >= 0) &&
+                      (entries[selectedIndex[0]].fuClass == FU_BRANCH) &&
+                      (entries[combEntryIndex].fuClass == FU_BRANCH)) &&
+                    ((selectedIndex[1] < 0) || (ages[combEntryIndex] < selectedAge[1]))) begin
+                    selectedIndex[1] = combEntryIndex;
+                    selectedAge[1] = ages[combEntryIndex];
+                end
             end
         end
 

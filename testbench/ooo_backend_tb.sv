@@ -348,7 +348,9 @@ module ooo_backend_tb;
         wait_commit(8, 32'hDEAD_BEF0);
         memoryReadData = 32'hDEAD_BEEF;
 
-        // Taken branch resolves only after older work has retired.
+        // A lane-0 branch and lane-1 integer operation dispatch together. The
+        // unified IQ steers the branch to the branch-capable secondary port
+        // and the integer operation to the primary port in the same cycle.
         while (robCount != 0) tick();
         clear_lane0();
         decode0.valid = 1'b1;
@@ -362,26 +364,31 @@ module ooo_backend_tb;
         decode0.useRs1 = 1'b1;
         decode0.useRs2 = 1'b1;
         decode0.immediate = 32'h10;
-        wait_lane0_accept();
-        set_addi0(32'h128, 9, 0, 7);
+        set_addi1(32'h128, 9, 0, 7);
+        #1;
+        if (dispatchAccept != 2'b11)
+            $fatal(1, "branch+integer dual dispatch failed");
+        tick();
+        clear_lane0();
+        clear_lane1();
         #1;
         if (!branchTaken || branchPc != 32'h124 || !branchIsConditional ||
             branchTarget != 32'h134 || branchMispredicted ||
             branchRedirect != 32'h134)
             $fatal(1, "branch resolution is incorrect");
-        if (!branchResolved || !dispatchAccept[0])
-            $fatal(1, "younger operation blocked: resolved=%0b accept=%b rob=%0d issue=%0d olderBranch=%0b issuePc=%h issueTag=%0d head=%0d headPc=%h",
-                   branchResolved, dispatchAccept, robCount, issueCount,
-                   dut.integerHasOlderUnresolvedBranch,
-                   dut.issueUop[0].pc, dut.issueUop[0].robTag,
-                   dut.reorderBuffer.headPtr,
-                   dut.reorderBuffer.entries[dut.reorderBuffer.headPtr].pc);
+        if (!branchResolved || !dut.branchIssueLane ||
+            !dut.issueValid[0] || !dut.issueValid[1] ||
+            (dut.issueUop[0].pc != 32'h128) ||
+            (dut.issueUop[1].pc != 32'h124))
+            $fatal(1, "branch/int port steering failed: resolved=%0b lane=%0b issue=%b pc0=%h pc1=%h",
+                   branchResolved, dut.branchIssueLane, dut.issueValid,
+                   dut.issueUop[0].pc, dut.issueUop[1].pc);
         tick();
-        clear_lane0();
         wait_commit(9, 32'd7);
 
-        // A direction miss squashes the conditional branch and all younger
-        // work, restores committed rename state, and permits correct-path work.
+        // A direction miss squashes a co-issued younger integer operation,
+        // suppresses its delayed PRF writeback, restores committed rename
+        // state, and permits correct-path work.
         while (robCount != 0) tick();
         clear_lane0();
         decode0.valid = 1'b1;
@@ -392,14 +399,18 @@ module ooo_backend_tb;
         decode0.useRs1 = 1'b1;
         decode0.useRs2 = 1'b1;
         decode0.immediate = 32'h50;
-        wait_lane0_accept();
-        set_addi0(32'h180, 10, 0, 99);
+        set_addi1(32'h180, 10, 0, 99);
         #1;
-        if (!branchResolved || branchTaken || !branchMispredicted ||
-            branchRedirect != 32'h134 || !dispatchAccept[0])
-            $fatal(1, "conditional misprediction recovery trigger failed");
+        if (dispatchAccept != 2'b11)
+            $fatal(1, "mispredict branch+integer dispatch failed");
         tick();
         clear_lane0();
+        clear_lane1();
+        #1;
+        if (!branchResolved || branchTaken || !branchMispredicted ||
+            branchRedirect != 32'h134 || !dut.branchIssueLane)
+            $fatal(1, "conditional misprediction recovery trigger failed");
+        tick();
         #1;
         if (robCount != 1 || issueCount != 0 || lsqCount != 0)
             $fatal(1, "misprediction squash state rob=%0d issue=%0d lsq=%0d mask=%h",

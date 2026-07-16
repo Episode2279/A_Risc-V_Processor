@@ -1,0 +1,310 @@
+Archive member included to satisfy reference by file (symbol)
+
+/usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+                              /tmp/ccZKhHo4.o (__divdi3)
+/usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+                              /tmp/ccZKhHo4.o (__udivdi3)
+/usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+                              /tmp/cc954W84.o (__mulsi3)
+/usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+                              /tmp/ccZKhHo4.o (__muldi3)
+/usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+                              /tmp/cc954W84.o (__divsi3)
+/usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+                              /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o) (__clz_tab)
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+IMEM             0x00000000         0x00010000         xr
+DMEM             0x00000000         0x00010000         xrw
+DLOAD            0x00010000         0x00010000         xr
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+LOAD /tmp/cc954W84.o
+LOAD /tmp/cckHcBro.o
+LOAD /tmp/cczrrUsc.o
+LOAD /tmp/ccC9IH8E.o
+LOAD /tmp/ccn4TlQ2.o
+LOAD /tmp/ccZKhHo4.o
+LOAD /tmp/ccGZRfFX.o
+
+.text           0x00000000     0x3b98
+ *(.init)
+ .init          0x00000000       0x40 /tmp/ccGZRfFX.o
+                0x00000000                _start
+ *(.text*)
+ .text          0x00000040       0x88 /tmp/cc954W84.o
+                0x00000040                iterate
+ .text.startup  0x000000c8      0x6f4 /tmp/cc954W84.o
+                0x000000c8                main
+ .text          0x000007bc      0x8c0 /tmp/cckHcBro.o
+                0x000007bc                cmp_idx
+                0x00000818                calc_func
+                0x0000093c                cmp_complex
+                0x00000988                copy_info
+                0x0000099c                core_list_insert_new
+                0x000009fc                core_list_remove
+                0x00000a24                core_list_undo_remove
+                0x00000a44                core_list_find
+                0x00000a98                core_list_reverse
+                0x00000abc                core_list_mergesort
+                0x00000c0c                core_bench_list
+                0x00000eb4                core_list_init
+ .text          0x0000107c      0xb68 /tmp/cczrrUsc.o
+                0x0000107c                core_init_matrix
+                0x00001274                matrix_sum
+                0x00001308                matrix_mul_const
+                0x000013dc                matrix_add_const
+                0x00001428                matrix_mul_vect
+                0x000014f4                matrix_mul_matrix
+                0x00001600                matrix_mul_matrix_bitextract
+                0x00001720                matrix_test
+                0x00001ba8                core_bench_matrix
+ .text          0x00001be4      0x5d0 /tmp/ccC9IH8E.o
+                0x00001be4                core_init_state
+                0x00001d2c                core_state_transition
+                0x00002014                core_bench_state
+ .text          0x000021b4      0x2ec /tmp/ccn4TlQ2.o
+                0x000021b4                get_seed_32
+                0x00002214                crcu8
+                0x0000225c                crcu16
+                0x000022e8                crcu32
+                0x00002404                crc16
+                0x00002498                check_data_types
+ .text          0x000024a0      0x9c4 /tmp/ccZKhHo4.o
+                0x00002670                ee_printf
+                0x00002a20                start_time
+                0x00002a3c                stop_time
+                0x00002a58                get_time
+                0x00002a70                time_in_secs
+                0x00002aa8                align_mem
+                0x00002ab4                portable_malloc
+                0x00002af4                portable_free
+                0x00002af8                portable_init
+                0x00002d08                portable_fini
+ .text          0x00002e64        0x0 /tmp/ccGZRfFX.o
+ .text          0x00002e64      0x614 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+                0x00002e64                __divdi3
+ .text          0x00003478      0x5bc /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+                0x00003478                __udivdi3
+ .text          0x00003a34       0x24 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+                0x00003a34                __mulsi3
+ .text          0x00003a58       0x8c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+                0x00003a58                __muldi3
+ .text          0x00003ae4       0xb4 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+                0x00003ae4                __divsi3
+                0x00003aec                __hidden___udivsi3
+                0x00003aec                __udivsi3
+                0x00003b34                __umodsi3
+                0x00003b68                __modsi3
+ .text          0x00003b98        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.eh_frame       0x00003b98       0xb4
+ .eh_frame      0x00003b98       0x68 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .eh_frame      0x00003c00       0x4c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+                                 0x60 (size before relaxing)
+
+.rela.dyn       0x00003c4c        0x0
+ .rela.text     0x00003c4c        0x0 /tmp/cc954W84.o
+ .rela.init     0x00003c4c        0x0 /tmp/cc954W84.o
+
+.data           0x00000000      0x8ac load address 0x00010000
+                0x00000000                        __data_start = .
+ *(.rodata*)
+ .rodata.str1.4
+                0x00000000      0x607 /tmp/cc954W84.o
+                                0x44a (size before relaxing)
+ *fill*         0x00000607        0x1 
+ .rodata        0x00000608       0x22 /tmp/cc954W84.o
+ .rodata.str1.4
+                0x0000062a       0xad /tmp/ccC9IH8E.o
+ *fill*         0x0000062a        0x2 
+ .rodata        0x0000062c       0x40 /tmp/ccC9IH8E.o
+ .rodata        0x0000066c       0x18 /tmp/ccn4TlQ2.o
+ .rodata.str1.4
+                0x00000684      0x10b /tmp/ccZKhHo4.o
+ .rodata        0x00000684      0x108 /tmp/ccZKhHo4.o
+ .rodata        0x0000078c      0x100 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+                0x0000078c                __clz_tab
+ *(.data*)
+ .data          0x0000088c        0xc /tmp/cc954W84.o
+                0x0000088c                mem_name
+ .data          0x00000898        0x0 /tmp/cckHcBro.o
+ .data          0x00000898        0x0 /tmp/cczrrUsc.o
+ .data          0x00000898        0x0 /tmp/ccC9IH8E.o
+ .data          0x00000898        0x0 /tmp/ccn4TlQ2.o
+ .data          0x00000898        0x0 /tmp/ccZKhHo4.o
+ .data          0x00000898        0x0 /tmp/ccGZRfFX.o
+ .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+ *(.sdata*)
+ .sdata         0x00000898       0x14 /tmp/ccZKhHo4.o
+                0x00000898                seed4_volatile
+                0x0000089c                seed3_volatile
+                0x000008a0                seed2_volatile
+                0x000008a4                seed1_volatile
+                0x000008a8                default_num_contexts
+                0x000008ac                        __data_end = .
+
+.bss            0x000008ac     0x47d0 load address 0x000108ac
+                0x000008ac                        __bss_start = .
+ *(.bss*)
+ .bss           0x000008ac      0x7d0 /tmp/cc954W84.o
+                0x000008ac                static_memblk
+ .bss           0x0000107c        0x0 /tmp/cckHcBro.o
+ .bss           0x0000107c        0x0 /tmp/cczrrUsc.o
+ .bss           0x0000107c        0x0 /tmp/ccC9IH8E.o
+ .bss           0x0000107c        0x0 /tmp/ccn4TlQ2.o
+ .bss           0x0000107c     0x4000 /tmp/ccZKhHo4.o
+ .bss           0x0000507c        0x0 /tmp/ccGZRfFX.o
+ .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+ *(COMMON)
+                0x0000507c                        __bss_end = .
+                0x0000ffe0                        PROVIDE (uart_tx = 0xffe0)
+                0x0000fff0                        PROVIDE (fromhost = 0xfff0)
+                0x0000fff8                        PROVIDE (tohost = 0xfff8)
+                0x0000ffc0                        __stack_top = ((ORIGIN (DMEM) + LENGTH (DMEM)) - 0x40)
+LOAD /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a
+OUTPUT(coremark.elf elf32-littleriscv)
+
+.sbss           0x0000507c       0x18 load address 0x000108ac
+ .sbss          0x0000507c       0x18 /tmp/ccZKhHo4.o
+                0x00005090                seed5_volatile
+
+.comment        0x00000000       0x22
+ .comment       0x00000000       0x22 /tmp/cc954W84.o
+                                 0x23 (size before relaxing)
+ .comment       0x00000022       0x23 /tmp/cckHcBro.o
+ .comment       0x00000022       0x23 /tmp/cczrrUsc.o
+ .comment       0x00000022       0x23 /tmp/ccC9IH8E.o
+ .comment       0x00000022       0x23 /tmp/ccn4TlQ2.o
+ .comment       0x00000022       0x23 /tmp/ccZKhHo4.o
+ .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.riscv.attributes
+                0x00000000       0x25
+ .riscv.attributes
+                0x00000000       0x25 /tmp/cc954W84.o
+ .riscv.attributes
+                0x00000025       0x25 /tmp/cckHcBro.o
+ .riscv.attributes
+                0x0000004a       0x25 /tmp/cczrrUsc.o
+ .riscv.attributes
+                0x0000006f       0x25 /tmp/ccC9IH8E.o
+ .riscv.attributes
+                0x00000094       0x25 /tmp/ccn4TlQ2.o
+ .riscv.attributes
+                0x000000b9       0x25 /tmp/ccZKhHo4.o
+ .riscv.attributes
+                0x000000de       0x23 /tmp/ccGZRfFX.o
+ .riscv.attributes
+                0x00000101       0x1c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .riscv.attributes
+                0x0000011d       0x1c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .riscv.attributes
+                0x00000139       0x1a /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .riscv.attributes
+                0x00000153       0x1c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .riscv.attributes
+                0x0000016f       0x1a /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .riscv.attributes
+                0x00000189       0x1c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_info     0x00000000     0x164b
+ .debug_info    0x00000000      0x972 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .debug_info    0x00000972      0x940 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_info    0x000012b2       0x31 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .debug_info    0x000012e3      0x231 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .debug_info    0x00001514       0x5f /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .debug_info    0x00001573       0xd8 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_abbrev   0x00000000      0x57c
+ .debug_abbrev  0x00000000      0x1de /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .debug_abbrev  0x000001de      0x1c5 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_abbrev  0x000003a3       0x28 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .debug_abbrev  0x000003cb      0x119 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .debug_abbrev  0x000004e4       0x28 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .debug_abbrev  0x0000050c       0x70 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_loclists
+                0x00000000      0xeac
+ .debug_loclists
+                0x00000000      0x676 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .debug_loclists
+                0x00000676      0x776 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_loclists
+                0x00000dec       0xc0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+
+.debug_aranges  0x00000000       0xb8
+ .debug_aranges
+                0x00000000       0x20 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .debug_aranges
+                0x00000020       0x20 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_aranges
+                0x00000040       0x20 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .debug_aranges
+                0x00000060       0x20 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .debug_aranges
+                0x00000080       0x20 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .debug_aranges
+                0x000000a0       0x18 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_rnglists
+                0x00000000      0x147
+ .debug_rnglists
+                0x00000000       0xa0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .debug_rnglists
+                0x000000a0       0xa7 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+
+.debug_line     0x00000000     0x1795
+ .debug_line    0x00000000      0xa14 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+ .debug_line    0x00000a14      0x955 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_line    0x00001369       0x7a /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .debug_line    0x000013e3      0x220 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .debug_line    0x00001603      0x153 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .debug_line    0x00001756       0x3f /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_str      0x00000000      0x410
+ .debug_str     0x00000000      0x410 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+                                0x265 (size before relaxing)
+ .debug_str     0x00000410      0x266 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_str     0x00000410       0xba /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .debug_str     0x00000410      0x204 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .debug_str     0x00000410       0xe7 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .debug_str     0x00000410      0x18a /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_line_str
+                0x00000000      0x138
+ .debug_line_str
+                0x00000000      0x138 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
+                                0x146 (size before relaxing)
+ .debug_line_str
+                0x00000138      0x146 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
+ .debug_line_str
+                0x00000138       0xa5 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
+ .debug_line_str
+                0x00000138      0x17e /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
+ .debug_line_str
+                0x00000138       0xa2 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
+ .debug_line_str
+                0x00000138      0x146 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
+
+.debug_frame    0x00000000       0x2c
+ .debug_frame   0x00000000       0x2c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
