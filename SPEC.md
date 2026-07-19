@@ -1,8 +1,8 @@
 # A RISC-V Processor: Microarchitecture Specification
 
 This document describes the current default RTL configuration. The central
-size parameters are declared in `source/TypesPkg.sv`; some BPU parameters are
-local to the modules under `source/functional/BPU`.
+size parameters are declared in `rtl/common/TypesPkg.sv`; some BPU parameters
+are local to the modules under `rtl/frontend/bpu`.
 
 ## Core overview
 
@@ -23,9 +23,14 @@ architectural state.
 | Completion/writeback width | 2 uops/cycle | Up to two execution results can complete and update the PRF. |
 | Retirement width | 2 uops/cycle | The ROB can retire a contiguous pair of completed uops. |
 
-The two issue ports are not symmetric. Port 0 accepts all functional-unit
-classes, while port 1 is used for ordinary integer or branch work supported by
-the secondary execution path. There is one LSU, so two memory operations cannot
+The scheduler has two accepted-issue slots but does not permanently bind one
+slot to the LSU. It forms an oldest memory/CSR candidate, an oldest
+integer/branch candidate, and a second ordinary-integer fallback candidate. If
+the memory candidate can enter the single shared LSU, the core issues it with
+one integer/branch uop. If LSQ ordering or sustained D-cache request
+back-pressure blocks it, the memory uop remains in the IQ and the two integer
+execution paths may instead accept the two non-memory candidates. Total IQ
+acceptance remains at most two uops per cycle, and two memory operations cannot
 execute together. The current commit logic also permits at most one Store and
 one branch to retire in a cycle because each has a single downstream update
 path.
@@ -36,11 +41,11 @@ The core is best described as a sequence of logical pipeline stages separated
 by a fetch-window register, queues, and execution-result registers:
 
 ```text
-Fetch Request + Post-accept Fold/Hash
+F0 PC Pair + Parallel I-cache / BPU Request
       |
       v
-Registered TAGE Read + Prediction Response
-      |
+F1 Synchronous I-cache / Prediction Response
+      |        (an I-cache miss blocks for refill)
       v
 Two-entry IF/ID Fetch Window
       |
@@ -69,21 +74,25 @@ interstage registers, restores program order at retirement.
 
 | Logical stage | Width | Main RTL | Current behavior |
 | --- | ---: | --- | --- |
-| 1. Fetch request and TAGE address | 2 instructions | `DualIfStages.sv`, `BranchPredictionUnit.sv`, `TageFoldedHistory.sv`, `TageHash.sv` | Reads the raw next-request `PC`/`PC+4` instructions. Post-accept or recovered GHR/Path History and precomputed folds generate the two synchronous TAGE table addresses. |
-| 2. Prediction response and next PC | 2 instructions | `BranchPredictionUnit.sv`, `TageTable.sv`, `StatisticalCorrector.sv`, BTB/GShare/RAS | Registered request PC/instruction/history is aligned with the one-cycle TAGE and SC response. Provider/alternate selection produces the raw TAGE direction, SC may correct it, and target selection chooses the following request PC. A taken slot-0 response suppresses slot 1. |
+| 1. F0 fetch request | 2 instruction addresses | `DualIfStages.sv`, `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageFoldedHistory.sv`, `TageHash.sv` | An accepted `PC`/`PC+4` pair launches the two-address synchronous I-cache tag/data lookup and the PC-indexed BPU lookup in parallel. No instruction word is read combinationally in F0. Post-accept or recovered GHR/Path History and precomputed folds generate the synchronous TAGE/SC table addresses. |
+| 2. F1 cache/prediction response and next PC | 2 instructions | `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageTable.sv`, `StatisticalCorrector.sv`, BTB/GShare/RAS | I-cache hit data is aligned with the retained BPU request context and registered TAGE/SC response. Provider/alternate selection produces the raw TAGE direction, SC may correct it, and target selection chooses the following request PC. A taken slot-0 response suppresses slot 1. An I-cache miss blocks this request, refills each missing 16-byte line with four backing-memory words, and internally retries the lookup before F1 becomes valid. |
 | 3. Fetch window | 2 instructions | `DualIF_IDRegister.sv` | The physical IF/ID register holds the oldest two fetched instructions. It can replace both slots, slide slot 1 into slot 0 after single dispatch, stall, or flush. |
 | 4. Decode | 2 instructions | `IdStages.sv`, `Decoder.sv` | Decodes RV32 control, architectural source/destination registers, immediates, memory width, branch type, CSR operation, and decode exceptions. This logic is combinational. |
 | 5. Rename and dispatch | 2 uops | `BackendDispatchStage.sv`, `RenameStage.sv` | Checks ROB/IQ/LSQ/free-PRF capacity atomically, translates architectural registers through the speculative RAT, allocates physical destinations, and inserts accepted uops into the ROB and IQ; memory uops also enter the LSQ. |
-| 6. Schedule, issue, and operand read | 2 uops | `BackendIssueStage.sv`, `IssueQueue.sv`, `PhysicalRegisterFile.sv` | Uops wait in the unified IQ until their sources are ready. Age-based selection chooses up to two port-compatible uops, and the PRF supplies their physical operands. |
-| 7. Execute / memory access | Up to 2 uops | `BackendExecuteStage.sv`, `OoOExecutionUnit.sv`, `LoadStoreExecutionUnit.sv` | Port 0 runs integer/branch/CSR work or the single LSU; port 1 runs integer or branch work. Branches resolve here. Loads check LSQ ordering/forwarding and may read data memory; Stores record address/data without modifying memory. |
-| 8. Completion, writeback, and wakeup | 2 results | Execution-unit result registers, PRF, ROB, IQ, LSQ | Registered results write the PRF, wake dependent IQ entries, and mark their ROB entries complete. Memory address/data state is written into the LSQ. Wrong-path completions are filtered during recovery. |
-| 9. Commit and retirement | 2 uops | `BackendCommitStage.sv`, `ReorderBuffer.sv`, `RenameStage.sv` | Retires only a contiguous completed ROB prefix, updates the committed RAT, frees old physical registers, takes precise traps, commits Stores to memory, and enqueues retired branch training. |
+| 6. Schedule, issue, and operand read | 2 uops | `BackendIssueStage.sv`, `IssueQueue.sv`, `PhysicalRegisterFile.sv` | Uops wait in the unified IQ until their sources are ready. Age-based selection forms memory/CSR, integer/branch, and second-integer fallback candidates. The backend accepts at most two, and the PRF supplies all candidate operands. |
+| 7. Execute / memory access | Up to 2 accepted uops | `BackendExecuteStage.sv`, `OoOExecutionUnit.sv`, `LoadStoreExecutionUnit.sv`, `DataCache.sv` | One shared LSU and two integer paths are available. A ready memory uop pairs with one integer/branch uop; an LSQ/cache-blocked memory candidate stays in the IQ while two ordinary integer-capable paths are used. Branches remain on the fixed main candidate path so LSU Ready cannot alter same-cycle recovery selection. Loads check LSQ forwarding/order and committed Store Buffer overlap before sending a ROB-tagged D-cache request. Multiple Loads may remain pending and complete by response tag. Stores only record address/data at execute. |
+| 8. Completion, writeback, and wakeup | 2 results | Execution-unit result registers, PRF, ROB, IQ, LSQ | Registered results write the PRF, wake dependent IQ entries, and mark their ROB entries complete. Memory address/data state is written into the LSQ. Wrong-path completions are filtered during recovery; a killed completion is consumed during the active filter window even if an LSU result has lane-0 priority. |
+| 9. Commit and retirement | 2 uops | `BackendCommitStage.sv`, `ReorderBuffer.sv`, `RenameStage.sv`, `StoreBuffer.sv` | Retires only a contiguous completed ROB prefix, updates the committed RAT, frees old physical registers, takes precise traps, transfers cacheable Stores into an eight-entry committed Store Buffer, preserves MMIO ordering, and enqueues retired branch training. |
 
 ### Physical boundaries versus logical stages
 
-The BPU has an internal request/response boundary: request PC, instruction,
-GHR/Path History, and synchronous TAGE table data are aligned across one clock.
-The front end then has an explicit `DualIF_IDRegister`, but there is no separate
+The front end has an F0/F1 synchronous request/response boundary. The accepted
+F0 PC pair enters the I-cache and BPU together; I-cache tag/data and TAGE/SC
+tables are read synchronously. The BPU retains the corresponding PC/history
+context across an I-cache miss, so its prediction metadata is not paired with a
+later request by mistake. Instruction words first become available with the F1
+I-cache response. The front end then has an explicit `DualIF_IDRegister`, but
+there is no separate
 legacy ID/EX register between decode and rename. Decode, capacity checking, and
 rename/dispatch form the combinational path that ends when accepted entries are
 clocked into the ROB, IQ, LSQ, and PRF allocation state.
@@ -94,10 +103,13 @@ load/store units register its completion and optional writeback result. The ROB
 then records completion independently of other instructions, and the commit
 stage waits until that entry reaches the head.
 
-`MEMStages.sv` is the data-memory/MMIO wrapper rather than a conventional
-in-order MEM pipeline register. Loads use the memory port during LSU execution;
-Stores use it only at ROB retirement. This distinction is what guarantees that
-a speculative Store cannot modify architectural memory.
+`MEMStages.sv` contains the D-cache and the synchronous data-memory/MMIO backing
+store rather than a conventional in-order MEM pipeline register. Non-forwarded
+Loads use its tagged request/response port during LSU execution. Cacheable
+Stores enter the committed Store Buffer at ROB retirement and drain to the
+D-cache in order. A cacheable Store is write-through and does not allocate on a
+miss. This retirement boundary guarantees that a speculative Store cannot
+modify architectural memory.
 
 ### Branch flow and pipeline recovery
 
@@ -123,6 +135,7 @@ when its entry reaches the ROB head, providing precise exceptions.
 | `PHYS_REG_NUM` | 48 | 6-bit physical-register index | The PRF contains 32 initial architectural mappings plus 16 extra registers for speculative destinations. |
 | `ISSUE_QUEUE_ENTRY_NUM` | 8 | See note below | Base integer scheduling capacity used when sizing the unified queue. |
 | `LSQ_ENTRY_NUM` | 8 | 3-bit LSQ tag | Maximum number of in-flight Loads and Stores tracked in memory order. |
+| `STORE_BUFFER_ENTRY_NUM` | 8 | 4-bit occupancy count | Maximum number of architecturally committed cacheable Stores waiting to drain. |
 
 ### ROB (`ROB_ENTRY_NUM`)
 
@@ -146,7 +159,7 @@ only when the uop retires. Consequently, the current core can have at most 16
 unretired destination mappings before physical-register pressure alone stops
 rename.
 
-The instantiated PRF has 10 combinational read ports and two writeback ports.
+The instantiated PRF has 12 combinational read ports and two writeback ports.
 The large read-port count supplies dispatch checks, two execution lanes, and
 retirement data in the current straightforward implementation; it is not an
 indication of ten-wide execution.
@@ -162,8 +175,12 @@ IQ depth = ISSUE_QUEUE_ENTRY_NUM + LSQ_ENTRY_NUM = 8 + 8 = 16 entries
 Therefore, the current physical Issue Queue contains 16 entries, even though
 `ISSUE_QUEUE_ENTRY_NUM` itself is 8. Memory uops occupy both the unified IQ and
 the separate LSQ until they issue. The IQ can accept, wake, select, and issue up
-to two uops per cycle. Selection is age-based among ready uops with a compatible
-execution port; an uop leaves the IQ only when that port accepts it.
+to two uops per cycle. It exposes a third candidate only for ready-aware
+fallback: when the selected memory uop is blocked, two integer uops may consume
+the two accepted-issue slots. Selection remains age-based, and a uop leaves the
+IQ only when its selected execution path actually accepts it. In particular,
+LSU `Valid` is suppressed whenever memory IQ `Ready` is suppressed, preventing
+a request from launching while a stale copy remains in the IQ.
 
 ### Load/Store Queue (`LSQ_ENTRY_NUM`)
 
@@ -172,6 +189,35 @@ Store-data state. Loads may bypass older Stores with known non-overlapping
 addresses and may forward from the youngest covering older Store. A Load waits
 if an older Store has an unknown address, unavailable data, or only a partial
 overlap. Stores become externally visible only when their ROB entries retire.
+Retirement actually transfers a cacheable Store into the committed Store
+Buffer; the backing-memory write may occur later, but never earlier.
+
+### Tagged pending Loads and committed Store Buffer
+
+`LoadStoreExecutionUnit` keeps one pending-metadata slot per ROB tag. An
+accepted non-forwarded Load records its destination physical register, address,
+and writeback intent in that slot; the tagged D-cache response later selects
+that metadata independently of response order. Recovery marks affected slots
+as killed rather than trying to cancel an already accepted cache transaction.
+The response is still drained, but it creates neither a ROB completion nor a
+PRF writeback.
+
+Cacheable Stores leave the LSQ at retirement and enter the separate eight-entry
+committed FIFO. This Store Buffer is not speculative and therefore has no
+branch-flush input. It drains oldest first through the write-through D-cache.
+The `StoreBuffer` module retains and tests its newest-to-oldest byte-merge query,
+but the backend does not currently use its direct full-forward result. A Load
+with no byte overlap may pass the committed buffer; any overlap, including full
+coverage, waits until the relevant Store drains. This guard avoids the
+zero-latency direct-completion path that exposed a CoreMark list-CRC error.
+Diagnostic comparison against an architectural memory shadow found the
+forwarded bytes correct, so completion/recovery integration remains the likely
+race rather than the byte-merge calculation.
+Forwarding from older uncommitted Stores inside the LSQ remains enabled. MMIO
+Stores bypass the buffer, remain at the ROB head until accepted, and wait for
+older buffered Stores. Serializing operations require the ROB/IQ/LSQ and Store
+Buffer to be empty and the D-cache
+wrapper to report idle, which includes an accepted backing-memory transaction.
 
 ## Branch prediction
 
@@ -344,9 +390,10 @@ speculative and committed views. Calls push `PC + 4`, and recognized returns pop
 the top entry. The current RAS committed shadow is still updated at execute
 resolution; adding a per-branch RAS checkpoint/action log remains future work.
 
-### CoreMark A/B result
+### CoreMark predictor A/B result
 
-The following runs use the same RV32I CoreMark image with 10 iterations,
+The following predictor-only snapshot predates the synchronous cache timing
+changes. The runs use the same RV32I CoreMark image with 10 iterations,
 2,236,266 retired conditional branches, and pipeline dumping disabled:
 
 | Direction mode | Cycles | Retired | IPC | Direction misses | Miss rate | Direction MPKI |
@@ -366,12 +413,35 @@ Both runs produce the expected CRCs and terminate successfully through
 `tohost`. CoreMark still prints its standard `Errors detected` duration warning
 because ten simulated iterations represent less than the required ten seconds.
 
+### Current synchronous-cache integration result
+
+With the current protected Store Buffer policy and the default 10-iteration
+image, the full simulation reaches `tohost=1` after 5,791,170 cycles and
+retires 8,064,024 instructions for an overall IPC of 1.3925. The CoreMark
+measurement interval reports 5,729,265 ticks, 8,003,643 retired instructions,
+and IPC 1.3970. The list/matrix/state CRCs are respectively `e3c1`, `0747`, and
+`8d84`.
+
+There are 2,236,467 retired conditional branches and 221,718 conditional
+mispredictions, a 9.9138% conditional miss rate. Total branch MPKI is 27.5160.
+I-cache and D-cache Load MPKI are 0.665 and 0.756. A fixed 100,000-cycle
+comparison measures IPC 1.3407 versus 0.8310 for the original blocking
+synchronous-cache baseline, a 61.34% recovery. Disabling committed-Store
+direct forwarding for correctness changes that snapshot by only about 0.04%
+relative to the unguarded 1.3412 result.
+
 ## Memory and address parameters
 
 | RTL parameter | Value | Explanation |
 | --- | ---: | --- |
-| `INS_ADDR_SIZE` | 65,536 bytes | Size of the modeled instruction memory. |
-| `DATA_ADDR_SIZE` | 65,536 bytes | Size of the modeled data memory. |
+| `INS_ADDR_SIZE` | 65,536 bytes | Size of the synchronous instruction backing memory below the I-cache. |
+| `DATA_ADDR_SIZE` | 65,536 bytes | Size of the synchronous data backing memory below the D-cache. |
+| `ICACHE_BYTES` | 4,096 bytes | Total I-cache data capacity. |
+| `ICACHE_LINE_BYTES` | 16 bytes | Four 32-bit instruction words per I-cache line. |
+| Derived I-cache set count | 256 | `4096 / 16`; the I-cache is direct-mapped. |
+| `DCACHE_SET_COUNT` | 64 | Number of direct-mapped D-cache sets. |
+| `DCACHE_LINE_BYTES` | 16 bytes | Four 32-bit words per D-cache line; total D-cache capacity is 1,024 bytes. |
+| `STORE_BUFFER_ENTRY_NUM` | 8 Stores | Committed FIFO entries. Disjoint Loads may pass; overlapping Loads wait for drain. The module's byte-merge query is retained for testing but is not used for backend direct forwarding. |
 | `RESET_VECTOR` | `0x00000000` | PC used after reset. |
 | `UART_TX_ADDR` | `0x0000FFE0` | Byte-oriented simulation UART output. |
 | `FROMHOST_ADDR` | `0x0000FFF0` | Host-to-target simulation mailbox. |
@@ -380,6 +450,68 @@ because ten simulated iterations represent less than the required ten seconds.
 The internal instruction and data memories use 16-bit byte indexes because
 their modeled capacities are 64 KiB, while architectural PCs and calculated
 addresses remain 32 bits.
+
+### Instruction cache and backing memory
+
+The 4 KiB I-cache is direct-mapped with 256 sets and 16-byte lines. Each F0
+request synchronously reads the tag/data locations for `PC` and `PC+4`; the two
+addresses normally share a line, while independent lookup contexts handle a
+pair that crosses a line boundary. A hit produces the two instruction words in
+F1. A consumed hit may be replaced by the next request on the same edge, so the
+hit path can sustain one two-instruction fetch pair per cycle.
+
+The cache is blocking and supports one fetch request at a time. On a miss it
+issues four aligned 32-bit reads to the single-port, one-cycle synchronous
+`insnMem` backing store, installs the complete line, and retries the retained
+lookup. If a cross-line pair misses in both lines, those lines are refilled
+sequentially. Redirect/flush cancels transient lookup/refill state without
+invalidating resident cache lines.
+
+### Data cache and backing memory
+
+The 1 KiB D-cache is direct-mapped with 64 sets and 16-byte lines. Its elastic
+synchronous Tag/Data lookup can accept and return one cached Load hit per cycle
+when the response consumer is ready. Requests and responses carry the ROB tag,
+allowing the LSU to retain multiple pending Load metadata entries. A single
+MSHR performs critical-word-first refill: the requested word returns as soon as
+the first backing response arrives, while the remaining three aligned words
+fill in the background. Cached Loads hitting another set may proceed during
+refill; same-set Loads, Stores, and MMIO wait until installation completes.
+
+Stores use write-through, no-write-allocate policy. A Store hit updates the
+resident word with byte enables and also writes the backing RAM; a Store miss
+updates only backing RAM. Eight committed Store Buffer entries decouple ROB
+retirement from this write-through path. The backend allows a younger Load to
+pass when its requested bytes are disjoint from every buffered Store, but stalls
+on any overlap until the relevant Store drains. Direct committed-buffer
+full-forwarding is disabled by the CoreMark CRC correctness guard described
+above; LSQ forwarding from older uncommitted Stores is unaffected. The
+parameterized MMIO range defaults to `0x0000_FFE0`
+through `0x0000_FFFF` and bypasses allocation and caching so UART, `fromhost`,
+and `tohost` side effects remain uncached. `dataMem` implements synchronous
+registered reads and byte-enabled writes suitable for SRAM/BRAM-style
+inference.
+
+The I-cache remains blocking. The D-cache now has one MSHR and different-set
+hit-under-miss, but has no secondary-miss merging, write-back/dirty eviction,
+prefetching, or load replay. These remaining limitations are important when
+interpreting memory-intensive IPC.
+
+### Cache performance counters
+
+The cache modules export diagnostic 64-bit counters through `topCPU`; they are
+not software-visible CSRs. `sim_main.cpp` prints them at the end of a run as
+`CACHE I` and `CACHE D`:
+
+| Summary | Counters represented |
+| --- | --- |
+| `CACHE I` | accepted fetch-pair requests, hits and pair misses, physical line misses, miss-stall cycles, refilled lines/cycles, cross-line misses, response-backpressure cycles, and line-miss MPKI |
+| `CACHE D` | accepted requests, Load hits/misses and miss rate, Store hits/misses, MMIO requests, structurally busy cycles, refilled lines/cycles, request-backpressure cycles, Store-commit-stall cycles, and Load-miss MPKI |
+
+MPKI uses retired instructions as the denominator. The I-cache value counts
+physical line misses, whereas the D-cache value counts Load misses; therefore
+neither should be inferred from the pair-level I-cache miss field or Store-miss
+field.
 
 ## Parameter relationships and tuning guidance
 
@@ -398,7 +530,12 @@ addresses remain 32 bits.
 - Larger structures increase the amount of exploitable instruction-level
   parallelism or reduce predictor aliasing, but also increase FPGA area,
   simulation cost, reset work, and potentially the critical path.
+- `ICACHE_BYTES / ICACHE_LINE_BYTES` determines the direct-mapped I-cache set
+  count. `DCACHE_SET_COUNT * DCACHE_LINE_BYTES` determines D-cache data
+  capacity. Current cache implementations require power-of-two geometry and
+  four 32-bit words per line.
 - After changing structural parameters, run at least `make lint`,
-  `make bpu-smoke`, `make tage-smoke`, `make sc-smoke`, `make ooo-smoke`,
+  `make bpu-smoke`, `make tage-smoke`, `make sc-smoke`, `make cache-smoke`,
+  `make store-buffer-smoke`, `make lsu-pending-smoke`, `make ooo-smoke`,
   `make ooo-backend-smoke`, and
   `make rv32i-compliance-smoke`, followed by a CoreMark comparison.

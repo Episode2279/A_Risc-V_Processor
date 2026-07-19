@@ -14,7 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ELF_DIR = ROOT / "compliance/act4/work/a-riscv-processor-rv32i/elfs/rv32i/I"
 DEFAULT_OBJCOPY = ROOT / ".tools/riscv-gcc-15/bin/riscv-none-elf-objcopy"
-DEFAULT_SIM = ROOT / "source/obj_dir_act4/VtopCPU"
+DEFAULT_SIM = ROOT / "build/verilator/act4/VtopCPU"
 MEMORY_BYTES = 1 << 20
 
 
@@ -56,7 +56,7 @@ def main() -> int:
             result = subprocess.run(
                 [args.sim, f"+insn-mem={image}", f"+data-mem={image}",
                  f"+max-cycles={args.max_cycles}"],
-                cwd=ROOT / "source", env=env,
+                cwd=ROOT, env=env,
             )
             (passed if result.returncode == 0 else failed).append(elf.name)
 
