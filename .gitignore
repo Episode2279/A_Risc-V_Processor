@@ -7,4 +7,4 @@ source/topCPU_tb_konata.trace
 source/coremark_branch.csv
 .tools/
 compliance/act4/work/
-third_party/riscv-arch-test/work/
+/third_party/
