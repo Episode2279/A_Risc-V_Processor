@@ -70,9 +70,9 @@ typedef ee_u32    CORE_TICKS;
 #define MEM_LOCATION "private DMEM per thread (hw remap)"
 #endif
 
-/* Reduce iterations for simulation bring-up */
+/* Use a longer run so predictor warm-up and steady-state IPC are visible. */
 #ifndef ITERATIONS
-#define ITERATIONS 1
+#define ITERATIONS 10
 #endif
 
 /* Core clock used to convert the architectural mcycle/cycle counter into the

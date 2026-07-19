@@ -49,15 +49,27 @@ conservative wait until the Store retires.
 
 The LSU does not yet predict past unknown Store addresses or replay a violated
 Load. Store address and data wake together because the current Memory Queue
-requires both source operands before issue. Conditional branches use GShare plus
-the BTB and may be in flight concurrently. Each branch carries a RAT/free-list
+requires both source operands before issue. Conditional branches use a
+five-table TAGE predictor with a GShare base and compact statistical corrector;
+the BTB supplies taken targets. Multiple branches may be in flight
+concurrently. Each branch carries a RAT/free-list
 checkpoint, and a misprediction selectively removes younger ROB, IQ, and LSQ
-state. JAL/JALR and CSR instructions remain serialized. The GHR is still updated
-non-speculatively. Illegal instructions, ECALL/EBREAK, and misaligned instruction
+state. JAL/JALR are predicted with direct targets/BTB/RAS and are no longer
+serialized; CSR and ordering operations retain serialization. The GHR updates
+speculatively and recovers from ROB-tagged checkpoints. Illegal instructions,
+ECALL/EBREAK, and misaligned instruction
 or data accesses are recorded in the ROB and take a precise machine-mode trap at
 the head; trap entry updates `mepc`, `mcause`, `mtval`, and `mstatus`, while MRET
 restores interrupt-enable state and redirects through `mepc`.
 
+Each ROB branch entry retains its GShare index, TAGE/SC prediction metadata,
+and resolved outcome. The GShare PHT, tagged TAGE tables, SC signed counters,
+BTB, and branch statistics update from the in-order retirement stream; execute
+resolution drives redirect and speculative-history recovery. There is no
+standalone local-history predictor or Tournament chooser. The current RAS
+committed shadow also updates at resolution pending a checkpoint/action log.
+
 The next performance milestone is decoupled Store-address/data wakeup plus Load
-replay or memory-dependence prediction. After that, add speculative GHR recovery
-and remove the remaining jump serialization.
+replay or memory-dependence prediction. RAS checkpointed recovery and a
+speculative predictor-update log are possible follow-ups if commit-training
+latency becomes a dominant front-end cost.

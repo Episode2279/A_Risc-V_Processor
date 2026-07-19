@@ -24,6 +24,7 @@ module DualIF_IDRegister
             packet0_o.predictedTarget <= '0;
             packet0_o.predictorIndex <= '0;
             packet0_o.historySnapshot <= '0;
+            packet0_o.tageMeta <= '0;
             packet0_o.predictedBtbHit <= 1'b0; packet0_o.predictedRasUsed <= 1'b0;
             packet1_o.insn <= '0;
             packet1_o.pc <= RESET_PC;
@@ -31,6 +32,7 @@ module DualIF_IDRegister
             packet1_o.predictedTarget <= '0;
             packet1_o.predictorIndex <= '0;
             packet1_o.historySnapshot <= '0;
+            packet1_o.tageMeta <= '0;
             packet1_o.predictedBtbHit <= 1'b0; packet1_o.predictedRasUsed <= 1'b0;
         end else if (stall) begin
             packet0_o.insn <= packet0_o.insn;
@@ -39,6 +41,7 @@ module DualIF_IDRegister
             packet0_o.predictedTarget <= packet0_o.predictedTarget;
             packet0_o.predictorIndex <= packet0_o.predictorIndex;
             packet0_o.historySnapshot <= packet0_o.historySnapshot;
+            packet0_o.tageMeta <= packet0_o.tageMeta;
             packet0_o.predictedBtbHit <= packet0_o.predictedBtbHit; packet0_o.predictedRasUsed <= packet0_o.predictedRasUsed;
             packet1_o.insn <= packet1_o.insn;
             packet1_o.pc <= packet1_o.pc;
@@ -46,6 +49,7 @@ module DualIF_IDRegister
             packet1_o.predictedTarget <= packet1_o.predictedTarget;
             packet1_o.predictorIndex <= packet1_o.predictorIndex;
             packet1_o.historySnapshot <= packet1_o.historySnapshot;
+            packet1_o.tageMeta <= packet1_o.tageMeta;
             packet1_o.predictedBtbHit <= packet1_o.predictedBtbHit; packet1_o.predictedRasUsed <= packet1_o.predictedRasUsed;
         end else if ((packet0_o.insn == '0) && (packet1_o.insn == '0)) begin
             // Fill an empty window after reset/flush.
@@ -55,6 +59,7 @@ module DualIF_IDRegister
             packet0_o.predictedTarget <= fetch0_i.predictedTarget;
             packet0_o.predictorIndex <= fetch0_i.predictorIndex;
             packet0_o.historySnapshot <= fetch0_i.historySnapshot;
+            packet0_o.tageMeta <= fetch0_i.tageMeta;
             packet0_o.predictedBtbHit <= fetch0_i.predictedBtbHit; packet0_o.predictedRasUsed <= fetch0_i.predictedRasUsed;
             packet1_o.insn <= fetch1_i.insn;
             packet1_o.pc <= fetch1_i.pc;
@@ -62,6 +67,7 @@ module DualIF_IDRegister
             packet1_o.predictedTarget <= fetch1_i.predictedTarget;
             packet1_o.predictorIndex <= fetch1_i.predictorIndex;
             packet1_o.historySnapshot <= fetch1_i.historySnapshot;
+            packet1_o.tageMeta <= fetch1_i.tageMeta;
             packet1_o.predictedBtbHit <= fetch1_i.predictedBtbHit; packet1_o.predictedRasUsed <= fetch1_i.predictedRasUsed;
         end else if (issue0 && issue1) begin
             // Both decoded slots issued, so replace the window with the next
@@ -72,6 +78,7 @@ module DualIF_IDRegister
             packet0_o.predictedTarget <= fetch0_i.predictedTarget;
             packet0_o.predictorIndex <= fetch0_i.predictorIndex;
             packet0_o.historySnapshot <= fetch0_i.historySnapshot;
+            packet0_o.tageMeta <= fetch0_i.tageMeta;
             packet0_o.predictedBtbHit <= fetch0_i.predictedBtbHit; packet0_o.predictedRasUsed <= fetch0_i.predictedRasUsed;
             packet1_o.insn <= fetch1_i.insn;
             packet1_o.pc <= fetch1_i.pc;
@@ -79,6 +86,7 @@ module DualIF_IDRegister
             packet1_o.predictedTarget <= fetch1_i.predictedTarget;
             packet1_o.predictorIndex <= fetch1_i.predictorIndex;
             packet1_o.historySnapshot <= fetch1_i.historySnapshot;
+            packet1_o.tageMeta <= fetch1_i.tageMeta;
             packet1_o.predictedBtbHit <= fetch1_i.predictedBtbHit; packet1_o.predictedRasUsed <= fetch1_i.predictedRasUsed;
         end else if (issue0) begin
             if (packet1_o.insn == '0) begin
@@ -90,6 +98,7 @@ module DualIF_IDRegister
                 packet0_o.predictedTarget <= fetch0_i.predictedTarget;
                 packet0_o.predictorIndex <= fetch0_i.predictorIndex;
                 packet0_o.historySnapshot <= fetch0_i.historySnapshot;
+                packet0_o.tageMeta <= fetch0_i.tageMeta;
                 packet0_o.predictedBtbHit <= fetch0_i.predictedBtbHit; packet0_o.predictedRasUsed <= fetch0_i.predictedRasUsed;
                 packet1_o.insn <= fetch1_i.insn;
                 packet1_o.pc <= fetch1_i.pc;
@@ -97,6 +106,7 @@ module DualIF_IDRegister
                 packet1_o.predictedTarget <= fetch1_i.predictedTarget;
                 packet1_o.predictorIndex <= fetch1_i.predictorIndex;
                 packet1_o.historySnapshot <= fetch1_i.historySnapshot;
+                packet1_o.tageMeta <= fetch1_i.tageMeta;
                 packet1_o.predictedBtbHit <= fetch1_i.predictedBtbHit; packet1_o.predictedRasUsed <= fetch1_i.predictedRasUsed;
             end else begin
                 // Only the older decoded slot issued. Preserve the younger
@@ -107,6 +117,7 @@ module DualIF_IDRegister
                 packet0_o.predictedTarget <= packet1_o.predictedTarget;
                 packet0_o.predictorIndex <= packet1_o.predictorIndex;
                 packet0_o.historySnapshot <= packet1_o.historySnapshot;
+                packet0_o.tageMeta <= packet1_o.tageMeta;
                 packet0_o.predictedBtbHit <= packet1_o.predictedBtbHit; packet0_o.predictedRasUsed <= packet1_o.predictedRasUsed;
                 packet1_o.insn <= fetch0_i.insn;
                 packet1_o.pc <= fetch0_i.pc;
@@ -114,6 +125,7 @@ module DualIF_IDRegister
                 packet1_o.predictedTarget <= fetch0_i.predictedTarget;
                 packet1_o.predictorIndex <= fetch0_i.predictorIndex;
                 packet1_o.historySnapshot <= fetch0_i.historySnapshot;
+                packet1_o.tageMeta <= fetch0_i.tageMeta;
                 packet1_o.predictedBtbHit <= fetch0_i.predictedBtbHit; packet1_o.predictedRasUsed <= fetch0_i.predictedRasUsed;
             end
         end

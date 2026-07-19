@@ -30,6 +30,12 @@ module ReorderBuffer
     input  logic [5:0] completeCause_i [COMPLETE_WIDTH],
     input  word_t completeValue_i [COMPLETE_WIDTH],
 
+    input  logic branchResolveValid_i,
+    input  rob_tag_t branchResolveTag_i,
+    input  logic branchTaken_i,
+    input  instruction_addr_t branchTarget_i,
+    input  logic branchMispredicted_i,
+
     output logic [COMMIT_WIDTH-1:0] commitValid_o,
     output rob_entry_t commitEntry_o [COMMIT_WIDTH],
     input  logic [COMMIT_WIDTH-1:0] commitReady_i,
@@ -203,6 +209,9 @@ module ReorderBuffer
                 end
             end
             entries[recoverTag_i].complete <= 1'b1;
+            entries[recoverTag_i].branchTaken <= branchTaken_i;
+            entries[recoverTag_i].branchTarget <= branchTarget_i;
+            entries[recoverTag_i].branchMispredicted <= branchMispredicted_i;
             tailPtr <= addPtr(headPtr, recoverKeepCount);
             entryCount <= recoverKeepCount;
         end else begin
@@ -227,6 +236,12 @@ module ReorderBuffer
                     entries[completeTag_i[seqLane]].exceptionCause <= completeCause_i[seqLane];
                     entries[completeTag_i[seqLane]].exceptionValue <= completeValue_i[seqLane];
                 end
+            end
+
+            if (branchResolveValid_i && entries[branchResolveTag_i].valid) begin
+                entries[branchResolveTag_i].branchTaken <= branchTaken_i;
+                entries[branchResolveTag_i].branchTarget <= branchTarget_i;
+                entries[branchResolveTag_i].branchMispredicted <= branchMispredicted_i;
             end
 
             headPtr <= addPtr(headPtr, commitAccepted);

@@ -37,6 +37,10 @@ module OoOBackend
     output logic [1:0] branchCheckpointValid_o,
     output rob_tag_t branchCheckpointTag_o [2],
     output logic [BPU_HISTORY_WIDTH-1:0] branchCheckpointHistory_o [2],
+    output tage_history_t branchCheckpointTageHistory_o [2],
+    output tage_path_history_t branchCheckpointTagePathHistory_o [2],
+    output bpu_train_t branchTrain_o,
+    input  logic branchTrainReady_i,
 
     output logic trapValid_o,
     output instruction_addr_t trapPc_o,
@@ -154,6 +158,7 @@ module OoOBackend
     word_t commitStoreData;
     mem_access_t commitStoreAccess;
     integer prepLane;
+    integer trainLane;
 
     always_comb begin
         laneValid[0] = decode0_bus.valid;
@@ -207,6 +212,12 @@ module OoOBackend
         branchCheckpointTag_o[1] = robAllocTag[1];
         branchCheckpointHistory_o[0] = decode0_bus.historySnapshot;
         branchCheckpointHistory_o[1] = decode1_bus.historySnapshot;
+        branchCheckpointTageHistory_o[0] = decode0_bus.tageMeta.history;
+        branchCheckpointTageHistory_o[1] = decode1_bus.tageMeta.history;
+        branchCheckpointTagePathHistory_o[0] =
+            decode0_bus.tageMeta.pathHistory;
+        branchCheckpointTagePathHistory_o[1] =
+            decode1_bus.tageMeta.pathHistory;
         lsqAllocValid = robAllocValid & laneIsMemory;
 
         for (prepLane = 0; prepLane < 2; prepLane = prepLane + 1)
@@ -229,10 +240,37 @@ module OoOBackend
         recoveryValid = branchMispredicted_o;
         recoveryTag = branchRobTag_o;
         integerOrderingReady = 1'b1;
+
+        branchTrain_o = '0;
+        trainLane = -1;
+        if (robRetireValid[0] && robCommitEntry[0].isBranch)
+            trainLane = 0;
+        else if (robRetireValid[1] && robCommitEntry[1].isBranch)
+            trainLane = 1;
+        if (trainLane >= 0) begin
+            branchTrain_o.valid = 1'b1;
+            branchTrain_o.pc = robCommitEntry[trainLane].pc;
+            branchTrain_o.isConditional =
+                (robCommitEntry[trainLane].branchCtr >= BR_BEQ) &&
+                (robCommitEntry[trainLane].branchCtr <= BR_BGEU);
+            branchTrain_o.isCall = robCommitEntry[trainLane].isCall;
+            branchTrain_o.isReturn = robCommitEntry[trainLane].isReturn;
+            branchTrain_o.taken = robCommitEntry[trainLane].branchTaken;
+            branchTrain_o.target = robCommitEntry[trainLane].branchTarget;
+            branchTrain_o.mispredicted = robCommitEntry[trainLane].branchMispredicted;
+            branchTrain_o.predictedTaken = robCommitEntry[trainLane].predictedTaken;
+            branchTrain_o.predictedTarget = robCommitEntry[trainLane].predictedTarget;
+            branchTrain_o.predictedBtbHit = robCommitEntry[trainLane].predictedBtbHit;
+            branchTrain_o.predictedRasUsed = robCommitEntry[trainLane].predictedRasUsed;
+            branchTrain_o.predictorIndex = robCommitEntry[trainLane].predictorIndex;
+            branchTrain_o.tageMeta = robCommitEntry[trainLane].tageMeta;
+            branchTrain_o.branchCtr = robCommitEntry[trainLane].branchCtr;
+        end
     end
 
     BackendCommitStage commitStage (
         .recoveryValid_i(recoveryValid),
+        .branchTrainReady_i(branchTrainReady_i),
         .robCommitValid_i(robCommitValid), .robCommitEntry_i(robCommitEntry),
         .lsqHeadEntry_i(lsqHeadEntry), .lsqHeadTag_i(lsqHeadTag),
         .robCommitReady_o(robCommitReady), .robRetireValid_o(robRetireValid),
@@ -334,6 +372,10 @@ module OoOBackend
         .completeException_i(robCompleteException),
         .completeCause_i(robCompleteCause),
         .completeValue_i(robCompleteValue),
+        .branchResolveValid_i(branchResolved_o),
+        .branchResolveTag_i(branchRobTag_o),
+        .branchTaken_i(branchTaken_o), .branchTarget_i(branchTarget_o),
+        .branchMispredicted_i(branchMispredicted_o),
         .commitValid_o(robCommitValid),
         .commitEntry_o(robCommitEntry),
         .commitReady_i(robCommitReady),
@@ -365,15 +407,18 @@ module OoOBackend
         .clk(clk), .rst(rst), .issueValid_i(issueValid), .issueReady_i(issueReady),
         .issueUop_i(issueUop), .issueCount_i(issueCount), .robFull_i(robFull),
         .iqFull_i(issueFull), .lsqFull_i(lsqFull), .prfEmpty_i(freePhysCount == 0),
-        .branchResolved_i(branchResolved_o), .branchMispredicted_i(branchMispredicted_o),
-        .branchConditional_i(branchIsConditional_o),
-        .branchDirectionMispredict_i(branchIsConditional_o && (issueUop[branchIssueLane].predictedTaken != branchTaken_o)),
-        .branchTargetMispredict_i(branchTaken_o && issueUop[branchIssueLane].predictedTaken &&
-            (issueUop[branchIssueLane].predictedTarget != branchTarget_o)),
-        .branchBtbMiss_i(branchTaken_o && !issueUop[branchIssueLane].predictedBtbHit &&
-            !issueUop[branchIssueLane].predictedRasUsed && (issueUop[branchIssueLane].branchCtr != BR_JAL)),
-        .branchJal_i(issueUop[branchIssueLane].branchCtr == BR_JAL), .branchJalr_i(issueUop[branchIssueLane].branchCtr == BR_JALR),
-        .branchRasMiss_i(issueUop[branchIssueLane].isReturn && (!issueUop[branchIssueLane].predictedRasUsed || branchMispredicted_o)),
+        .branchResolved_i(branchTrain_o.valid), .branchMispredicted_i(branchTrain_o.mispredicted),
+        .branchConditional_i(branchTrain_o.isConditional),
+        .branchDirectionMispredict_i(branchTrain_o.isConditional &&
+            (branchTrain_o.tageMeta.finalPrediction != branchTrain_o.taken)),
+        .branchTargetMispredict_i(branchTrain_o.taken && branchTrain_o.predictedTaken &&
+            (branchTrain_o.predictedTarget != branchTrain_o.target)),
+        .branchBtbMiss_i(branchTrain_o.taken && !branchTrain_o.predictedBtbHit &&
+            !branchTrain_o.predictedRasUsed && (branchTrain_o.branchCtr != BR_JAL)),
+        .branchJal_i(branchTrain_o.branchCtr == BR_JAL),
+        .branchJalr_i(branchTrain_o.branchCtr == BR_JALR),
+        .branchRasMiss_i(branchTrain_o.isReturn &&
+            (!branchTrain_o.predictedRasUsed || branchTrain_o.mispredicted)),
         .jumpSerializing_i(jumpSerializing), .dualIssueCycles_o(perfDualIssueCycles_o),
         .singleIssueCycles_o(perfSingleIssueCycles_o), .iqNoReadyCycles_o(perfIqNoReadyCycles_o),
         .port0LsuBlockedCycles_o(perfPort0LsuBlockedCycles_o),

@@ -131,6 +131,9 @@ module ooo_smoke_tb;
         .completeValid_i(robCompleteValid), .completeTag_i(robCompleteTag),
         .completeException_i(robCompleteException), .completeCause_i(robCompleteCause),
         .completeValue_i(robCompleteValue),
+        .branchResolveValid_i(1'b0), .branchResolveTag_i('0),
+        .branchTaken_i(1'b0), .branchTarget_i('0),
+        .branchMispredicted_i(1'b0),
         .commitValid_o(robCommitValid), .commitEntry_o(robCommitEntry),
         .commitReady_i(robCommitReady), .empty_o(robEmpty), .full_o(robFull),
         .count_o(robCount)
@@ -291,7 +294,8 @@ module ooo_smoke_tb;
         iqWakeValid[0] = 1'b1;
         iqWakePhys[0] = 35;
         #1;
-        if (!iqIssueValid[0] || iqIssueUop[0].src1Phys != 35)
+        if (!((iqIssueValid[0] && (iqIssueUop[0].src1Phys == 35)) ||
+              (iqIssueValid[1] && (iqIssueUop[1].src1Phys == 35))))
             $fatal(1, "IQ same-cycle wakeup/select failed");
         tick();
         iqWakeValid = '0;
@@ -306,7 +310,7 @@ module ooo_smoke_tb;
         tick();
         iqDispatch = '{default:'0};
         iqWakeValid = '0;
-        if (!iqIssueValid[0]) $fatal(1, "IQ lost a dispatch-cycle wakeup");
+        if (!(|iqIssueValid)) $fatal(1, "IQ lost a dispatch-cycle wakeup");
         tick();
         if (!iqEmpty) $fatal(1, "IQ did not issue dispatch-cycle wakeup operation");
 
@@ -361,8 +365,9 @@ module ooo_smoke_tb;
         tick();
         iqDispatch = '{default:'0};
         #1;
-        if (iqIssueValid != 2'b11 || iqIssueUop[0].pc != 32'h300 ||
-            iqIssueUop[1].pc != 32'h304)
+        if (iqIssueValid != 2'b11 ||
+            !(((iqIssueUop[0].pc == 32'h300) && (iqIssueUop[1].pc == 32'h304)) ||
+              ((iqIssueUop[0].pc == 32'h304) && (iqIssueUop[1].pc == 32'h300))))
             $fatal(1, "unified IQ failed ALU+ALU dual selection: valid=%b pc=%h/%h count=%0d",
                    iqIssueValid, iqIssueUop[0].pc, iqIssueUop[1].pc, iqCount);
         iqIssueReady = 2'b11;

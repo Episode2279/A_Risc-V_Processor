@@ -215,6 +215,16 @@ module RenameStage
             robEntry_o[packLane].lsqTag = lsqTag_i[packLane];
             robEntry_o[packLane].isStore = renamedUop_o[packLane].dataWriteEnable;
             robEntry_o[packLane].isBranch = (renamedUop_o[packLane].branchCtr != BR_NONE);
+            robEntry_o[packLane].branchCtr = renamedUop_o[packLane].branchCtr;
+            robEntry_o[packLane].isCall = renamedUop_o[packLane].isCall;
+            robEntry_o[packLane].isReturn = renamedUop_o[packLane].isReturn;
+            robEntry_o[packLane].predictedTaken = renamedUop_o[packLane].predictedTaken;
+            robEntry_o[packLane].predictedTarget = renamedUop_o[packLane].predictedTarget;
+            robEntry_o[packLane].predictedBtbHit = renamedUop_o[packLane].predictedBtbHit;
+            robEntry_o[packLane].predictedRasUsed = renamedUop_o[packLane].predictedRasUsed;
+            robEntry_o[packLane].predictorIndex = renamedUop_o[packLane].predictorIndex;
+            robEntry_o[packLane].tageMeta = (packLane == 0) ?
+                decode0_bus.tageMeta : decode1_bus.tageMeta;
             robEntry_o[packLane].isCsr = (renamedUop_o[packLane].wbSelect == WB_CSR);
             robEntry_o[packLane].exceptionValue = renamedUop_o[packLane].exceptionValue;
             robEntry_o[packLane].mret = renamedUop_o[packLane].mret;

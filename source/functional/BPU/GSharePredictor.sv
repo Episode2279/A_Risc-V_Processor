@@ -7,6 +7,7 @@ module GSharePredictor
 (
     input  logic clk,
     input  logic rst,
+    input  logic flush_i,
 
     input  instruction_addr_t queryPc_i,
     output logic predictTaken_o,
@@ -28,14 +29,17 @@ module GSharePredictor
     input  logic updateIsConditional_i,
     input  bpu_index_t updateIndex_i,
     input  logic updateTaken_i,
-    input  logic updateMispredicted_i,
-    input  rob_tag_t updateRobTag_i,
+    input  logic recoverValid_i,
+    input  logic recoverIsConditional_i,
+    input  logic recoverTaken_i,
+    input  rob_tag_t recoverRobTag_i,
     input  logic [1:0] checkpointAllocValid_i,
     input  rob_tag_t checkpointAllocTag_i [2],
     input  logic [HISTORY_W-1:0] checkpointAllocHistory_i [2]
 );
 
     logic [HISTORY_W-1:0] globalHistory;
+    logic [HISTORY_W-1:0] committedHistory;
     logic [1:0] patternTable [PHT_ENTRIES];
     logic [1:0] updateCounter;
     logic [HISTORY_W-1:0] robHistoryCheckpoint [ROB_ENTRY_NUM];
@@ -56,6 +60,7 @@ module GSharePredictor
     always_ff @(posedge clk or negedge rst) begin
         if (!rst) begin
             globalHistory <= '0;
+            committedHistory <= '0;
             for (entryIndex = 0; entryIndex < PHT_ENTRIES;
                  entryIndex = entryIndex + 1) begin
                 patternTable[entryIndex] = 2'b01;
@@ -63,31 +68,36 @@ module GSharePredictor
             for (checkpointIndex = 0; checkpointIndex < ROB_ENTRY_NUM;
                  checkpointIndex = checkpointIndex + 1)
                 robHistoryCheckpoint[checkpointIndex] = '0;
-        end else if (updateValid_i) begin
-            if (updateIsConditional_i && updateTaken_i) begin
+        end else begin
+            if (updateValid_i && updateIsConditional_i && updateTaken_i) begin
                 if (updateCounter != 2'b11)
                     patternTable[updateIndex_i] <= updateCounter + 2'b01;
-            end else if (updateIsConditional_i) begin
+            end else if (updateValid_i && updateIsConditional_i) begin
                 if (updateCounter != 2'b00)
                     patternTable[updateIndex_i] <= updateCounter - 2'b01;
             end
-            if (updateMispredicted_i) begin
-                if (updateIsConditional_i)
-                    globalHistory <= {robHistoryCheckpoint[updateRobTag_i][HISTORY_W-2:0], updateTaken_i};
+            if (updateValid_i && updateIsConditional_i)
+                committedHistory <=
+                    {committedHistory[HISTORY_W-2:0], updateTaken_i};
+
+            if (flush_i) begin
+                globalHistory <= (updateValid_i && updateIsConditional_i) ?
+                    {committedHistory[HISTORY_W-2:0], updateTaken_i} :
+                    committedHistory;
+            end else if (recoverValid_i) begin
+                if (recoverIsConditional_i)
+                    globalHistory <=
+                        {robHistoryCheckpoint[recoverRobTag_i][HISTORY_W-2:0], recoverTaken_i};
                 else
-                    globalHistory <= robHistoryCheckpoint[updateRobTag_i];
+                    globalHistory <= robHistoryCheckpoint[recoverRobTag_i];
+            end else if (speculateValid_i || speculateValid1_i) begin
+                if (speculateValid1_i)
+                    globalHistory <= speculateValid_i ?
+                        {globalHistory[HISTORY_W-3:0], speculateTaken_i, speculateTaken1_i} :
+                        {globalHistory[HISTORY_W-2:0], speculateTaken1_i};
+                else
+                    globalHistory <= {globalHistory[HISTORY_W-2:0], speculateTaken_i};
             end
-        end
-        if (rst && (speculateValid_i || speculateValid1_i) &&
-            !(updateValid_i && updateMispredicted_i)) begin
-            if (speculateValid1_i)
-                globalHistory <= speculateValid_i ?
-                    {globalHistory[HISTORY_W-3:0], speculateTaken_i, speculateTaken1_i} :
-                    {globalHistory[HISTORY_W-2:0], speculateTaken1_i};
-            else
-                globalHistory <= {globalHistory[HISTORY_W-2:0], speculateTaken_i};
-        end
-        if (rst) begin
             for (checkpointIndex = 0; checkpointIndex < 2; checkpointIndex = checkpointIndex + 1)
                 if (checkpointAllocValid_i[checkpointIndex])
                     robHistoryCheckpoint[checkpointAllocTag_i[checkpointIndex]] <=

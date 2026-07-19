@@ -21,6 +21,7 @@ module IdStages
     assign id_bus.predictedTarget = id_packet.predictedTarget;
     assign id_bus.predictorIndex = id_packet.predictorIndex;
     assign id_bus.historySnapshot = id_packet.historySnapshot;
+    assign id_bus.tageMeta = id_packet.tageMeta;
     assign id_bus.predictedBtbHit = id_packet.predictedBtbHit;
     assign id_bus.predictedRasUsed = id_packet.predictedRasUsed;
 

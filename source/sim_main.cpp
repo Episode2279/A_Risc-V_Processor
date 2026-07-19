@@ -293,7 +293,22 @@ int main(int argc, char** argv) {
   const bool enable_trace = trace_enabled(argc, argv);
   const bool enable_pipe_dump = pipe_dump_enabled(argc, argv);
   FILE* pipe_dump_file = NULL;
+  FILE* branch_trace_file = NULL;
   VerilatedVcdC* tfp = NULL;
+
+  const char* branch_trace_path = getenv("SIM_BRANCH_TRACE");
+  if (branch_trace_path != NULL && branch_trace_path[0] != '\0') {
+    branch_trace_file = fopen(branch_trace_path, "w");
+    if (branch_trace_file == NULL) {
+      fprintf(stderr, "Failed to open branch trace %s.\n", branch_trace_path);
+      fclose(log_file);
+      delete topCPU;
+      delete contextp;
+      return 1;
+    }
+    fprintf(branch_trace_file,
+            "pc,history,path,tage,final,taken,strong,sc_low\n");
+  }
 
   if (enable_pipe_dump) {
     pipe_dump_file = fopen(kPipeDumpFileName, "w");
@@ -338,12 +353,32 @@ int main(int argc, char** argv) {
   dump_pipeline_snapshot(pipe_dump_file, topCPU, 0, contextp->time());
 
   uint64_t cycle_count = 0;
+  uint64_t retired_instructions = 0;
+  uint64_t sc_overrides = 0;
+  uint64_t sc_corrections = 0;
+  uint64_t sc_harms = 0;
   uint32_t tohost = 0;
   bool timed_out = true;
 
   while (!contextp->gotFinish() && cycle_count < max_cycles) {
     cycle_count++;
     eval_cycle(topCPU, contextp, tfp);
+    retired_instructions += (uint64_t)topCPU->dbg_retireCount;
+    sc_overrides += (uint64_t)topCPU->dbg_scOverrideEvent;
+    sc_corrections += (uint64_t)topCPU->dbg_scCorrectEvent;
+    sc_harms += (uint64_t)topCPU->dbg_scHarmEvent;
+    if (branch_trace_file != NULL && topCPU->dbg_branchTrainValid) {
+      fprintf(branch_trace_file,
+              "%08x,%016llx,%04x,%u,%u,%u,%u,%u\n",
+              (uint32_t)topCPU->dbg_branchTrainPc,
+              (unsigned long long)topCPU->dbg_branchTrainHistory,
+              (uint32_t)topCPU->dbg_branchTrainPathHistory,
+              (unsigned)topCPU->dbg_branchTrainTagePrediction,
+              (unsigned)topCPU->dbg_branchTrainFinalPrediction,
+              (unsigned)topCPU->dbg_branchTrainTaken,
+              (unsigned)topCPU->dbg_branchTrainStrong,
+              (unsigned)topCPU->dbg_branchTrainScLowConfidence);
+    }
     dump_pipeline_snapshot(pipe_dump_file, topCPU, cycle_count, contextp->time());
 
     if (topCPU->uartValid_o && topCPU->uartData_o != '\r') {
@@ -383,6 +418,10 @@ int main(int argc, char** argv) {
            (unsigned)topCPU->dbg_issueCount,
            (unsigned)topCPU->dbg_lsqCount);
   log_both(log_file,
+           "retired=%llu measured_ipc=%.4f\n",
+           (unsigned long long)retired_instructions,
+           cycle_count ? (double)retired_instructions / (double)cycle_count : 0.0);
+  log_both(log_file,
            "PERF issue_dual=%llu issue_single=%llu iq_no_ready=%llu "
            "port0_lsu_blocked=%llu port0_branch_blocked=%llu\n"
            "PERF rob_full=%llu iq_full=%llu lsq_full=%llu prf_empty=%llu "
@@ -410,6 +449,12 @@ int main(int argc, char** argv) {
            (unsigned long long)topCPU->dbg_perfJalMispredictCount,
            (unsigned long long)topCPU->dbg_perfJalrMispredictCount,
            (unsigned long long)topCPU->dbg_perfRasMissCount);
+  log_both(log_file,
+           "SC overrides=%llu corrections=%llu harms=%llu net=%lld\n",
+           (unsigned long long)sc_overrides,
+           (unsigned long long)sc_corrections,
+           (unsigned long long)sc_harms,
+           (long long)sc_corrections - (long long)sc_harms);
 
   int exit_code = 0;
   if (timed_out) {
@@ -428,6 +473,9 @@ int main(int argc, char** argv) {
   }
   if (pipe_dump_file != NULL) {
     fclose(pipe_dump_file);
+  }
+  if (branch_trace_file != NULL) {
+    fclose(branch_trace_file);
   }
   fclose(log_file);
   delete topCPU;

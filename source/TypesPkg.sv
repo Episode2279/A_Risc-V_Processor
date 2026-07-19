@@ -29,6 +29,31 @@ package TypesPkg;
     // A 1K-entry PHT materially reduces destructive aliasing in CoreMark while
     // remaining small compared with the ROB/PRF state in this educational core.
     parameter int BPU_HISTORY_WIDTH = 10;
+    // TAGE uses a longer speculative history without changing the 1K-entry
+    // GShare base-predictor index.
+    parameter int TAGE_HISTORY_WIDTH = 64;
+    // A compact speculative signature of the recent control-flow path.  It is
+    // kept separate from the direction GHR so identical Taken/Not-taken
+    // sequences reached through different static branches can hash apart.
+    parameter int TAGE_PATH_HISTORY_WIDTH = 16;
+    parameter int TAGE_TABLE_NUM = 5;
+    parameter int TAGE_TABLE_ENTRIES = 256;
+    // Entry generations revalidate a prediction-time Provider after queued
+    // retirement training.  Five bits provide 32 distinct versions, exceeding
+    // the current ROB/front-end bound on simultaneously live replacements.
+    parameter int TAGE_GENERATION_WIDTH = 5;
+    // CBP-style logical predictor-state accounting.  This deliberately counts
+    // each logical prediction table once; physical multi-port replication and
+    // pipeline/ROB metadata are implementation costs, not extra logical
+    // predictor entries.  The default configuration must stay within 4 KiB.
+    parameter int BPU_CBP_STORAGE_LIMIT_BITS = 4 * 1024 * 8;
+    parameter int BPU_TAGE_GSHARE_STORAGE_BITS = 27917;
+    parameter int BPU_SC_STORAGE_BITS = 4608;
+    // Four 7-bit incrementally maintained H=3/7/15/31 folds feed the SC.
+    parameter int BPU_SC_FOLD_STORAGE_BITS = 4 * 7;
+    parameter int BPU_TOTAL_STORAGE_BITS =
+        BPU_TAGE_GSHARE_STORAGE_BITS + BPU_SC_STORAGE_BITS +
+        BPU_SC_FOLD_STORAGE_BITS;
 
     // Derived address widths used by memory index signals inside the design.
     localparam int INS_ADDR = $clog2(INS_ADDR_SIZE);
@@ -48,8 +73,42 @@ package TypesPkg;
     typedef logic [ROB_INDEX-1:0] rob_tag_t;
     typedef logic [LSQ_INDEX-1:0] lsq_tag_t;
     typedef logic [BPU_HISTORY_WIDTH-1:0] bpu_index_t;
+    typedef logic [TAGE_HISTORY_WIDTH-1:0] tage_history_t;
+    typedef logic [TAGE_PATH_HISTORY_WIDTH-1:0] tage_path_history_t;
+    typedef logic [TAGE_GENERATION_WIDTH-1:0] tage_generation_t;
+    typedef logic [$clog2(TAGE_TABLE_NUM)-1:0] tage_provider_t;
     // Program counter and instruction addresses use full datapath width.
     typedef word_t instruction_addr_t;
+
+    // Prediction-time metadata retained until a control-flow instruction retires.
+    // Index/tag values are recomputed from pc+history at commit so table
+    // geometry remains local to the TAGE implementation.
+    typedef struct packed {
+        tage_history_t history;
+        tage_path_history_t pathHistory;
+        logic           providerValid;
+        tage_provider_t provider;
+        tage_generation_t providerGeneration;
+        logic           providerPrediction;
+        logic           alternatePrediction;
+        // Raw TAGE/UAN direction before the statistical corrector.  TAGE
+        // allocation and provider training use this value so an SC correction
+        // cannot hide a residual TAGE miss.
+        logic           tagePrediction;
+        logic           finalPrediction;
+        logic           providerWeak;
+        logic           scLowConfidence;
+    } tage_meta_t;
+
+    // A retired TAGE training event.  Direction-table writes may be delayed by
+    // the banked update path, while committed-history state advances when this
+    // record is accepted into the queue.
+    typedef struct packed {
+        logic              isConditional;
+        instruction_addr_t pc;
+        logic              taken;
+        tage_meta_t        meta;
+    } tage_update_t;
 
     // Reset and MMIO map used by the testbench and software images.
     localparam word_t RESET_VECTOR = '0;
@@ -171,6 +230,24 @@ package TypesPkg;
         logic              mret;
     } renamed_uop_t;
 
+    typedef struct packed {
+        logic              valid;
+        instruction_addr_t pc;
+        logic              isConditional;
+        logic              isCall;
+        logic              isReturn;
+        logic              taken;
+        instruction_addr_t target;
+        logic              mispredicted;
+        logic              predictedTaken;
+        instruction_addr_t predictedTarget;
+        logic              predictedBtbHit;
+        logic              predictedRasUsed;
+        bpu_index_t        predictorIndex;
+        tage_meta_t        tageMeta;
+        branch_ctr_t       branchCtr;
+    } bpu_train_t;
+
     // ROB state does not carry ordinary result data: completed integer results
     // live in the PRF. The ROB records ordering and retirement metadata.
     typedef struct packed {
@@ -185,6 +262,18 @@ package TypesPkg;
         lsq_tag_t          lsqTag;
         logic              isStore;
         logic              isBranch;
+        branch_ctr_t       branchCtr;
+        logic              isCall;
+        logic              isReturn;
+        logic              predictedTaken;
+        instruction_addr_t predictedTarget;
+        logic              predictedBtbHit;
+        logic              predictedRasUsed;
+        bpu_index_t        predictorIndex;
+        tage_meta_t        tageMeta;
+        logic              branchTaken;
+        instruction_addr_t branchTarget;
+        logic              branchMispredicted;
         logic              isCsr;
         logic              exception;
         logic [5:0]        exceptionCause;

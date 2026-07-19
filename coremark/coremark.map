@@ -1,15 +1,15 @@
 Archive member included to satisfy reference by file (symbol)
 
 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
-                              /tmp/ccZKhHo4.o (__divdi3)
+                              /tmp/ccqlu58u.o (__divdi3)
 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
-                              /tmp/ccZKhHo4.o (__udivdi3)
+                              /tmp/ccqlu58u.o (__udivdi3)
 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
-                              /tmp/cc954W84.o (__mulsi3)
+                              /tmp/ccFqtPuU.o (__mulsi3)
 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
-                              /tmp/ccZKhHo4.o (__muldi3)
+                              /tmp/ccqlu58u.o (__muldi3)
 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
-                              /tmp/cc954W84.o (__divsi3)
+                              /tmp/ccFqtPuU.o (__divsi3)
 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
                               /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o) (__clz_tab)
 
@@ -25,24 +25,24 @@ DLOAD            0x00010000         0x00010000         xr
 
 Linker script and memory map
 
-LOAD /tmp/cc954W84.o
-LOAD /tmp/cckHcBro.o
-LOAD /tmp/cczrrUsc.o
-LOAD /tmp/ccC9IH8E.o
-LOAD /tmp/ccn4TlQ2.o
-LOAD /tmp/ccZKhHo4.o
-LOAD /tmp/ccGZRfFX.o
+LOAD /tmp/ccFqtPuU.o
+LOAD /tmp/ccl1ofhg.o
+LOAD /tmp/ccIj38EK.o
+LOAD /tmp/ccWSJs1w.o
+LOAD /tmp/ccS7yQkb.o
+LOAD /tmp/ccqlu58u.o
+LOAD /tmp/cchgRsWw.o
 
 .text           0x00000000     0x3b98
  *(.init)
- .init          0x00000000       0x40 /tmp/ccGZRfFX.o
+ .init          0x00000000       0x40 /tmp/cchgRsWw.o
                 0x00000000                _start
  *(.text*)
- .text          0x00000040       0x88 /tmp/cc954W84.o
+ .text          0x00000040       0x88 /tmp/ccFqtPuU.o
                 0x00000040                iterate
- .text.startup  0x000000c8      0x6f4 /tmp/cc954W84.o
+ .text.startup  0x000000c8      0x6f4 /tmp/ccFqtPuU.o
                 0x000000c8                main
- .text          0x000007bc      0x8c0 /tmp/cckHcBro.o
+ .text          0x000007bc      0x8c0 /tmp/ccl1ofhg.o
                 0x000007bc                cmp_idx
                 0x00000818                calc_func
                 0x0000093c                cmp_complex
@@ -55,7 +55,7 @@ LOAD /tmp/ccGZRfFX.o
                 0x00000abc                core_list_mergesort
                 0x00000c0c                core_bench_list
                 0x00000eb4                core_list_init
- .text          0x0000107c      0xb68 /tmp/cczrrUsc.o
+ .text          0x0000107c      0xb68 /tmp/ccIj38EK.o
                 0x0000107c                core_init_matrix
                 0x00001274                matrix_sum
                 0x00001308                matrix_mul_const
@@ -65,18 +65,18 @@ LOAD /tmp/ccGZRfFX.o
                 0x00001600                matrix_mul_matrix_bitextract
                 0x00001720                matrix_test
                 0x00001ba8                core_bench_matrix
- .text          0x00001be4      0x5d0 /tmp/ccC9IH8E.o
+ .text          0x00001be4      0x5d0 /tmp/ccWSJs1w.o
                 0x00001be4                core_init_state
                 0x00001d2c                core_state_transition
                 0x00002014                core_bench_state
- .text          0x000021b4      0x2ec /tmp/ccn4TlQ2.o
+ .text          0x000021b4      0x2ec /tmp/ccS7yQkb.o
                 0x000021b4                get_seed_32
                 0x00002214                crcu8
                 0x0000225c                crcu16
                 0x000022e8                crcu32
                 0x00002404                crc16
                 0x00002498                check_data_types
- .text          0x000024a0      0x9c4 /tmp/ccZKhHo4.o
+ .text          0x000024a0      0x9c4 /tmp/ccqlu58u.o
                 0x00002670                ee_printf
                 0x00002a20                start_time
                 0x00002a3c                stop_time
@@ -87,7 +87,7 @@ LOAD /tmp/ccGZRfFX.o
                 0x00002af4                portable_free
                 0x00002af8                portable_init
                 0x00002d08                portable_fini
- .text          0x00002e64        0x0 /tmp/ccGZRfFX.o
+ .text          0x00002e64        0x0 /tmp/cchgRsWw.o
  .text          0x00002e64      0x614 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
                 0x00002e64                __divdi3
  .text          0x00003478      0x5bc /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
@@ -110,36 +110,36 @@ LOAD /tmp/ccGZRfFX.o
                                  0x60 (size before relaxing)
 
 .rela.dyn       0x00003c4c        0x0
- .rela.text     0x00003c4c        0x0 /tmp/cc954W84.o
- .rela.init     0x00003c4c        0x0 /tmp/cc954W84.o
+ .rela.text     0x00003c4c        0x0 /tmp/ccFqtPuU.o
+ .rela.init     0x00003c4c        0x0 /tmp/ccFqtPuU.o
 
 .data           0x00000000      0x8ac load address 0x00010000
                 0x00000000                        __data_start = .
  *(.rodata*)
  .rodata.str1.4
-                0x00000000      0x607 /tmp/cc954W84.o
+                0x00000000      0x607 /tmp/ccFqtPuU.o
                                 0x44a (size before relaxing)
  *fill*         0x00000607        0x1 
- .rodata        0x00000608       0x22 /tmp/cc954W84.o
+ .rodata        0x00000608       0x22 /tmp/ccFqtPuU.o
  .rodata.str1.4
-                0x0000062a       0xad /tmp/ccC9IH8E.o
+                0x0000062a       0xad /tmp/ccWSJs1w.o
  *fill*         0x0000062a        0x2 
- .rodata        0x0000062c       0x40 /tmp/ccC9IH8E.o
- .rodata        0x0000066c       0x18 /tmp/ccn4TlQ2.o
+ .rodata        0x0000062c       0x40 /tmp/ccWSJs1w.o
+ .rodata        0x0000066c       0x18 /tmp/ccS7yQkb.o
  .rodata.str1.4
-                0x00000684      0x10b /tmp/ccZKhHo4.o
- .rodata        0x00000684      0x108 /tmp/ccZKhHo4.o
+                0x00000684      0x10b /tmp/ccqlu58u.o
+ .rodata        0x00000684      0x108 /tmp/ccqlu58u.o
  .rodata        0x0000078c      0x100 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
                 0x0000078c                __clz_tab
  *(.data*)
- .data          0x0000088c        0xc /tmp/cc954W84.o
+ .data          0x0000088c        0xc /tmp/ccFqtPuU.o
                 0x0000088c                mem_name
- .data          0x00000898        0x0 /tmp/cckHcBro.o
- .data          0x00000898        0x0 /tmp/cczrrUsc.o
- .data          0x00000898        0x0 /tmp/ccC9IH8E.o
- .data          0x00000898        0x0 /tmp/ccn4TlQ2.o
- .data          0x00000898        0x0 /tmp/ccZKhHo4.o
- .data          0x00000898        0x0 /tmp/ccGZRfFX.o
+ .data          0x00000898        0x0 /tmp/ccl1ofhg.o
+ .data          0x00000898        0x0 /tmp/ccIj38EK.o
+ .data          0x00000898        0x0 /tmp/ccWSJs1w.o
+ .data          0x00000898        0x0 /tmp/ccS7yQkb.o
+ .data          0x00000898        0x0 /tmp/ccqlu58u.o
+ .data          0x00000898        0x0 /tmp/cchgRsWw.o
  .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
  .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
  .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
@@ -147,7 +147,7 @@ LOAD /tmp/ccGZRfFX.o
  .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(div.o)
  .data          0x00000898        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_clz.o)
  *(.sdata*)
- .sdata         0x00000898       0x14 /tmp/ccZKhHo4.o
+ .sdata         0x00000898       0x14 /tmp/ccqlu58u.o
                 0x00000898                seed4_volatile
                 0x0000089c                seed3_volatile
                 0x000008a0                seed2_volatile
@@ -158,14 +158,14 @@ LOAD /tmp/ccGZRfFX.o
 .bss            0x000008ac     0x47d0 load address 0x000108ac
                 0x000008ac                        __bss_start = .
  *(.bss*)
- .bss           0x000008ac      0x7d0 /tmp/cc954W84.o
+ .bss           0x000008ac      0x7d0 /tmp/ccFqtPuU.o
                 0x000008ac                static_memblk
- .bss           0x0000107c        0x0 /tmp/cckHcBro.o
- .bss           0x0000107c        0x0 /tmp/cczrrUsc.o
- .bss           0x0000107c        0x0 /tmp/ccC9IH8E.o
- .bss           0x0000107c        0x0 /tmp/ccn4TlQ2.o
- .bss           0x0000107c     0x4000 /tmp/ccZKhHo4.o
- .bss           0x0000507c        0x0 /tmp/ccGZRfFX.o
+ .bss           0x0000107c        0x0 /tmp/ccl1ofhg.o
+ .bss           0x0000107c        0x0 /tmp/ccIj38EK.o
+ .bss           0x0000107c        0x0 /tmp/ccWSJs1w.o
+ .bss           0x0000107c        0x0 /tmp/ccS7yQkb.o
+ .bss           0x0000107c     0x4000 /tmp/ccqlu58u.o
+ .bss           0x0000507c        0x0 /tmp/cchgRsWw.o
  .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
  .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
  .bss           0x0000507c        0x0 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(muldi3.o)
@@ -182,17 +182,17 @@ LOAD /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a
 OUTPUT(coremark.elf elf32-littleriscv)
 
 .sbss           0x0000507c       0x18 load address 0x000108ac
- .sbss          0x0000507c       0x18 /tmp/ccZKhHo4.o
+ .sbss          0x0000507c       0x18 /tmp/ccqlu58u.o
                 0x00005090                seed5_volatile
 
 .comment        0x00000000       0x22
- .comment       0x00000000       0x22 /tmp/cc954W84.o
+ .comment       0x00000000       0x22 /tmp/ccFqtPuU.o
                                  0x23 (size before relaxing)
- .comment       0x00000022       0x23 /tmp/cckHcBro.o
- .comment       0x00000022       0x23 /tmp/cczrrUsc.o
- .comment       0x00000022       0x23 /tmp/ccC9IH8E.o
- .comment       0x00000022       0x23 /tmp/ccn4TlQ2.o
- .comment       0x00000022       0x23 /tmp/ccZKhHo4.o
+ .comment       0x00000022       0x23 /tmp/ccl1ofhg.o
+ .comment       0x00000022       0x23 /tmp/ccIj38EK.o
+ .comment       0x00000022       0x23 /tmp/ccWSJs1w.o
+ .comment       0x00000022       0x23 /tmp/ccS7yQkb.o
+ .comment       0x00000022       0x23 /tmp/ccqlu58u.o
  .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
  .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_udivdi3.o)
  .comment       0x00000022       0x23 /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(multi3.o)
@@ -201,19 +201,19 @@ OUTPUT(coremark.elf elf32-littleriscv)
 .riscv.attributes
                 0x00000000       0x25
  .riscv.attributes
-                0x00000000       0x25 /tmp/cc954W84.o
+                0x00000000       0x25 /tmp/ccFqtPuU.o
  .riscv.attributes
-                0x00000025       0x25 /tmp/cckHcBro.o
+                0x00000025       0x25 /tmp/ccl1ofhg.o
  .riscv.attributes
-                0x0000004a       0x25 /tmp/cczrrUsc.o
+                0x0000004a       0x25 /tmp/ccIj38EK.o
  .riscv.attributes
-                0x0000006f       0x25 /tmp/ccC9IH8E.o
+                0x0000006f       0x25 /tmp/ccWSJs1w.o
  .riscv.attributes
-                0x00000094       0x25 /tmp/ccn4TlQ2.o
+                0x00000094       0x25 /tmp/ccS7yQkb.o
  .riscv.attributes
-                0x000000b9       0x25 /tmp/ccZKhHo4.o
+                0x000000b9       0x25 /tmp/ccqlu58u.o
  .riscv.attributes
-                0x000000de       0x23 /tmp/ccGZRfFX.o
+                0x000000de       0x23 /tmp/cchgRsWw.o
  .riscv.attributes
                 0x00000101       0x1c /usr/lib/gcc/riscv64-unknown-elf/13.2.0/rv32i/ilp32/libgcc.a(_divdi3.o)
  .riscv.attributes

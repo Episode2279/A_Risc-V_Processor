@@ -147,6 +147,7 @@ module topCPU_tb #(
         .dbg_robCount(),
         .dbg_issueCount(),
         .dbg_lsqCount(),
+        .dbg_retireCount(),
         .dbg_perfDualIssueCycles(), .dbg_perfSingleIssueCycles(), .dbg_perfIqNoReadyCycles(),
         .dbg_perfPort0LsuBlockedCycles(), .dbg_perfPort0BranchBlockedCycles(),
         .dbg_perfRobFullCycles(), .dbg_perfIqFullCycles(), .dbg_perfLsqFullCycles(),
@@ -154,7 +155,13 @@ module topCPU_tb #(
         .dbg_perfJumpSerializationCycles()
         ,.dbg_perfConditionalCount(),.dbg_perfConditionalMispredictCount(),
         .dbg_perfDirectionMispredictCount(),.dbg_perfTargetMispredictCount(),.dbg_perfBtbMissCount(),
-        .dbg_perfJalMispredictCount(),.dbg_perfJalrMispredictCount(),.dbg_perfRasMissCount()
+        .dbg_perfJalMispredictCount(),.dbg_perfJalrMispredictCount(),.dbg_perfRasMissCount(),
+        .dbg_scOverrideEvent(),.dbg_scCorrectEvent(),.dbg_scHarmEvent(),
+        .dbg_branchTrainValid(),.dbg_branchTrainTaken(),
+        .dbg_branchTrainTagePrediction(),.dbg_branchTrainFinalPrediction(),
+        .dbg_branchTrainStrong(),.dbg_branchTrainScLowConfidence(),
+        .dbg_branchTrainPc(),.dbg_branchTrainHistory(),
+        .dbg_branchTrainPathHistory()
 `endif
     );
 

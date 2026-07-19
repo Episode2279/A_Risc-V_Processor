@@ -9,6 +9,7 @@ interface IdExeBusIf;
     instruction_addr_t predictedTarget;
     bpu_index_t        predictorIndex;
     logic [BPU_HISTORY_WIDTH-1:0] historySnapshot;
+    tage_meta_t        tageMeta;
     logic predictedBtbHit;
     logic predictedRasUsed;
     // Architectural side effects selected in decode.
@@ -52,6 +53,7 @@ interface IdExeBusIf;
         output predictedTarget,
         output predictorIndex,
         output historySnapshot,
+        output tageMeta,
         output predictedBtbHit, predictedRasUsed,
         output valid,
         output registerWriteEnable,
@@ -86,6 +88,7 @@ interface IdExeBusIf;
         input predictedTarget,
         input predictorIndex,
         input historySnapshot,
+        input tageMeta,
         input predictedBtbHit, predictedRasUsed,
         input valid,
         input registerWriteEnable,
@@ -122,6 +125,7 @@ interface IdExeBusIf;
         output predictedTarget,
         output predictorIndex,
         output historySnapshot,
+        output tageMeta,
         output predictedBtbHit, predictedRasUsed,
         output valid,
         output registerWriteEnable,
@@ -158,6 +162,7 @@ interface IdExeBusIf;
         input predictedTarget,
         input predictorIndex,
         input historySnapshot,
+        input tageMeta,
         input predictedBtbHit, predictedRasUsed,
         input valid,
         input registerWriteEnable,

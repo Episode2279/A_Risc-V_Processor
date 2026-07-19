@@ -21,6 +21,7 @@ PIPE_DUMP ?= 1
 VERILATOR ?= verilator
 VERILATOR_FLAGS ?= -sv --timing -Wno-TIMESCALEMOD
 VERILATOR_BUILD_FLAGS ?= --trace
+TOP_PARAM_FLAGS ?=
 
 RISCV_PREFIX ?= riscv64-unknown-elf-
 RISCV_GCC ?= $(RISCV_PREFIX)gcc
@@ -37,7 +38,7 @@ ifneq ($(filter 1 true yes on,$(TRACE)),)
 TRACE_ARG := +trace
 endif
 
-.PHONY: all help sim coremark lint bpu-smoke ooo-smoke ooo-backend-smoke rv32i-compliance-smoke act4-build act4-run build run konata csr-smoke clean clean-verilator clean-logs clean-coremark clean-compliance clean-temporary clean-generated clean-all
+.PHONY: all help sim coremark lint bpu-smoke tage-smoke tage-update-smoke sc-smoke ooo-smoke ooo-backend-smoke rv32i-compliance-smoke act4-build act4-run build run konata csr-smoke clean clean-verilator clean-logs clean-coremark clean-compliance clean-temporary clean-generated clean-all
 
 all: sim
 
@@ -46,7 +47,10 @@ help:
 	@printf "  make sim              Rebuild CoreMark images, lint, build, and run Verilator\n"
 	@printf "  make coremark         Rebuild coremark.elf and source/utils memory images\n"
 	@printf "  make lint             Verilator lint for RTL plus SV testbench\n"
-	@printf "  make bpu-smoke        Run direct-mapped BTB lookup/update tests\n"
+	@printf "  make bpu-smoke        Run GShare-base direction and BTB tests\n"
+	@printf "  make tage-smoke       Run tagged-table/TAGE predictor tests\n"
+	@printf "  make tage-update-smoke Run TAGE update-queue FIFO tests\n"
+	@printf "  make sc-smoke         Run statistical-corrector timing/training tests\n"
 	@printf "  make ooo-smoke        Run structural smoke tests for RAT/PRF/ROB/IQ/LSQ\n"
 	@printf "  make ooo-backend-smoke Run end-to-end OoO dispatch/execute/commit tests\n"
 	@printf "  make rv32i-compliance-smoke Run directed RV32I decode/trap tests\n"
@@ -65,6 +69,7 @@ help:
 	@printf "  MAX_CYCLES=10000000   Runtime cycle cap passed to sim_main.cpp\n"
 	@printf "  TRACE=1               Generate wave.vcd during run\n"
 	@printf "  PIPE_DUMP=0           Disable source/topCPU_tb_output.txt during run\n"
+	@printf "  TOP_PARAM_FLAGS=...   Pass top-module -G parameter overrides to Verilator\n"
 
 sim: coremark lint build run
 
@@ -90,6 +95,29 @@ bpu-smoke:
 		"$(TESTBENCH_DIR)/bpu_tb.sv" --top-module bpu_tb \
 		--Mdir obj_dir_bpu
 	cd "$(SOURCE_DIR)" && ./obj_dir_bpu/Vbpu_tb
+
+tage-smoke:
+	cd "$(SOURCE_DIR)" && \
+	$(VERILATOR) --binary $(VERILATOR_FLAGS) -f filelist.f \
+		"$(TESTBENCH_DIR)/tage_tb.sv" --top-module tage_tb \
+		--Mdir obj_dir_tage
+	cd "$(SOURCE_DIR)" && ./obj_dir_tage/Vtage_tb
+
+tage-update-smoke:
+	cd "$(SOURCE_DIR)" && \
+	$(VERILATOR) --binary $(VERILATOR_FLAGS) -f filelist.f \
+		"$(TESTBENCH_DIR)/tage_update_queue_tb.sv" \
+		--top-module tage_update_queue_tb \
+		--Mdir obj_dir_tage_update
+	cd "$(SOURCE_DIR)" && ./obj_dir_tage_update/Vtage_update_queue_tb
+
+sc-smoke:
+	cd "$(SOURCE_DIR)" && \
+	$(VERILATOR) --binary $(VERILATOR_FLAGS) \
+		TypesPkg.sv functional/BPU/StatisticalCorrector.sv \
+		"$(TESTBENCH_DIR)/sc_tb.sv" --top-module sc_tb \
+		--Mdir obj_dir_sc
+	cd "$(SOURCE_DIR)" && ./obj_dir_sc/Vsc_tb
 
 ooo-smoke:
 	cd "$(SOURCE_DIR)" && \
@@ -127,7 +155,8 @@ act4-run: act4-build
 build:
 	cd "$(SOURCE_DIR)" && \
 	$(VERILATOR) $(VERILATOR_FLAGS) --cc -f filelist.f \
-		--top-module $(TOP) --exe sim_main.cpp $(VERILATOR_BUILD_FLAGS) --build
+		--top-module $(TOP) --exe sim_main.cpp $(VERILATOR_BUILD_FLAGS) \
+		$(TOP_PARAM_FLAGS) --build
 
 run:
 	cd "$(SOURCE_DIR)" && SIM_PIPE_DUMP=$(PIPE_DUMP) ./obj_dir/V$(TOP) +max-cycles=$(MAX_CYCLES) $(TRACE_ARG)
@@ -156,18 +185,14 @@ csr-smoke: build
 clean: clean-verilator clean-logs
 
 clean-verilator:
-	rm -rf "$(SOURCE_DIR)/obj_dir"
-	rm -rf "$(SOURCE_DIR)/obj_dir_ooo"
-	rm -rf "$(SOURCE_DIR)/obj_dir_ooo_backend"
-	rm -rf "$(SOURCE_DIR)/obj_dir_bpu"
-	rm -rf "$(SOURCE_DIR)/obj_dir_rv32i"
-	rm -rf "$(SOURCE_DIR)/obj_dir_act4"
+	rm -rf "$(SOURCE_DIR)"/obj_dir*
 	rm -f "$(SOURCE_DIR)/wave.vcd" "$(SOURCE_DIR)/simulation_output.txt"
 
 clean-logs:
 	rm -f "$(SOURCE_DIR)/topCPU_tb_output.txt"
 	rm -f "$(SOURCE_DIR)/topCPU_tb_debug.txt"
 	rm -f "$(SOURCE_DIR)/topCPU_tb_konata.trace"
+	rm -f "$(SOURCE_DIR)/coremark_branch.csv"
 
 clean-coremark:
 	rm -f "$(COREMARK_DIR)/coremark.elf" "$(COREMARK_DIR)/coremark.map"

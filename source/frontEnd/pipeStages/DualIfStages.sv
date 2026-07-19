@@ -16,6 +16,11 @@ module DualIfStages
     input  logic              rst,
     input  logic [ADDR_W-1:0] jump_address,
     input  logic              jump_enable,
+    input  logic              predictionValid_i,
+    input  logic [ADDR_W-1:0] responsePc_i,
+    input  logic [INSN_W-1:0] responseInsn_i,
+    input  logic [ADDR_W-1:0] responsePc1_i,
+    input  logic [INSN_W-1:0] responseInsn1_i,
     input  logic              predictTaken_i,
     input  logic [ADDR_W-1:0] predictTarget_i,
     input  bpu_index_t        predictorIndex_i,
@@ -24,54 +29,73 @@ module DualIfStages
     input  bpu_index_t        predictorIndex1_i,
     input  logic [BPU_HISTORY_WIDTH-1:0] historySnapshot_i,
     input  logic [BPU_HISTORY_WIDTH-1:0] historySnapshot1_i,
+    input  tage_meta_t        tageMeta_i,
+    input  tage_meta_t        tageMeta1_i,
     input logic btbHit_i,btbHit1_i,rasUsed_i,rasUsed1_i,
     // pc_step_i is 0/4/8 for stall, single issue, or dual issue.
     input  logic [ADDR_W-1:0] pc_step_i,
+    output logic [ADDR_W-1:0] requestPc_o,
+    output logic [INSN_W-1:0] requestInsn_o,
+    output logic [ADDR_W-1:0] requestPc1_o,
+    output logic [INSN_W-1:0] requestInsn1_o,
     InstructionPacketIf.source fetch_packet0,
     InstructionPacketIf.source fetch_packet1
 );
 
     logic [ADDR_W-1:0] pc;
-    logic [ADDR_W-1:0] pc_plus4;
-    logic [INSN_W-1:0] fetchInsn0;
-    logic [INSN_W-1:0] fetchInsn1;
+    logic [ADDR_W-1:0] nextRequestPc;
 
-    assign pc_plus4 = pc + PC_INCREMENT;
-    assign fetch_packet0.pc = pc;
-    assign fetch_packet1.pc = pc_plus4;
-    assign fetch_packet0.insn = fetchInsn0;
-    // Only slot 0 is currently queried in the BTB. Suppress the sequential
-    // slot when it predicts taken so a wrong-path instruction is not decoded.
-    assign fetch_packet1.insn = (predictTaken_i && (pc_step_i != '0)) ?
-                                '0 : fetchInsn1;
-    assign fetch_packet0.predictedTaken = predictTaken_i &&
-                                           (pc_step_i != '0);
-    assign fetch_packet0.predictedTarget = predictTarget_i;
-    assign fetch_packet0.predictorIndex = predictorIndex_i;
-    assign fetch_packet0.historySnapshot = historySnapshot_i;
-    assign fetch_packet0.predictedBtbHit = btbHit_i;
-    assign fetch_packet0.predictedRasUsed = rasUsed_i;
-    assign fetch_packet1.predictedTaken = predictTaken1_i &&
-                                           !predictTaken_i && (pc_step_i == 32'd8);
-    assign fetch_packet1.predictedTarget = predictTarget1_i;
-    assign fetch_packet1.predictorIndex = predictorIndex1_i;
-    assign fetch_packet1.historySnapshot = historySnapshot1_i;
-    assign fetch_packet1.predictedBtbHit = btbHit1_i;
-    assign fetch_packet1.predictedRasUsed = rasUsed1_i;
+    // The registered BPU response is the only context exposed to IF/ID.  The
+    // combinational instruction-memory outputs below belong to the next
+    // request and must never be mixed with these response predictions.
+    assign fetch_packet0.pc = predictionValid_i ? responsePc_i : RESET_PC;
+    assign fetch_packet1.pc = predictionValid_i ? responsePc1_i : RESET_PC;
+    assign fetch_packet0.insn = predictionValid_i ? responseInsn_i : '0;
+    assign fetch_packet1.insn = predictionValid_i &&
+        !(predictTaken_i && (pc_step_i != '0)) ? responseInsn1_i : '0;
+    assign fetch_packet0.predictedTaken = predictionValid_i && predictTaken_i &&
+                                          (pc_step_i != '0);
+    assign fetch_packet0.predictedTarget = predictionValid_i ? predictTarget_i : '0;
+    assign fetch_packet0.predictorIndex = predictionValid_i ? predictorIndex_i : '0;
+    assign fetch_packet0.historySnapshot = predictionValid_i ? historySnapshot_i : '0;
+    assign fetch_packet0.tageMeta = predictionValid_i ? tageMeta_i : '0;
+    assign fetch_packet0.predictedBtbHit = predictionValid_i && btbHit_i;
+    assign fetch_packet0.predictedRasUsed = predictionValid_i && rasUsed_i;
+    assign fetch_packet1.predictedTaken = predictionValid_i && predictTaken1_i &&
+        !predictTaken_i && (pc_step_i == (PC_INCREMENT + PC_INCREMENT));
+    assign fetch_packet1.predictedTarget = predictionValid_i ? predictTarget1_i : '0;
+    assign fetch_packet1.predictorIndex = predictionValid_i ? predictorIndex1_i : '0;
+    assign fetch_packet1.historySnapshot = predictionValid_i ? historySnapshot1_i : '0;
+    assign fetch_packet1.tageMeta = predictionValid_i ? tageMeta1_i : '0;
+    assign fetch_packet1.predictedBtbHit = predictionValid_i && btbHit1_i;
+    assign fetch_packet1.predictedRasUsed = predictionValid_i && rasUsed1_i;
+
+    // A response can retire zero, one, or two instruction slots.  Redirects
+    // override that flow immediately; an invalid or stalled response repeats
+    // the last request so the registered predictor context stays aligned.
+    always_comb begin
+        nextRequestPc = pc;
+        if (jump_enable)
+            nextRequestPc = jump_address;
+        else if (predictionValid_i && (pc_step_i != '0)) begin
+            if (predictTaken_i)
+                nextRequestPc = predictTarget_i;
+            else if (predictTaken1_i &&
+                     (pc_step_i == (PC_INCREMENT + PC_INCREMENT)))
+                nextRequestPc = predictTarget1_i;
+            else
+                nextRequestPc = responsePc_i + pc_step_i;
+        end
+    end
+
+    assign requestPc_o = nextRequestPc;
+    assign requestPc1_o = nextRequestPc + PC_INCREMENT;
 
     always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+        if (!rst)
             pc <= RESET_PC;
-        end else if (jump_enable) begin
-            // Execute-stage redirects take priority over sequential issue width.
-            pc <= jump_address;
-        end else if (predictTaken_i && (pc_step_i != '0)) begin
-            pc <= predictTarget_i;
-        end else if (predictTaken1_i && (pc_step_i == 32'd8)) begin
-            pc <= predictTarget1_i;
-        end else begin
-            pc <= pc + pc_step_i;
-        end
+        else
+            pc <= nextRequestPc;
     end
 
     // Two read ports are modeled by two instruction-memory instances. This is
@@ -83,8 +107,8 @@ module DualIfStages
         .MEM_BYTES(MEM_BYTES),
         .MEM_FILE(MEM_FILE)
     ) insnMem0(
-        .addr(fetch_packet0.pc),
-        .instruction_o(fetchInsn0)
+        .addr(requestPc_o),
+        .instruction_o(requestInsn_o)
     );
 
     insnMem #(
@@ -94,8 +118,8 @@ module DualIfStages
         .MEM_BYTES(MEM_BYTES),
         .MEM_FILE(MEM_FILE)
     ) insnMem1(
-        .addr(fetch_packet1.pc),
-        .instruction_o(fetchInsn1)
+        .addr(requestPc1_o),
+        .instruction_o(requestInsn1_o)
     );
 
 endmodule

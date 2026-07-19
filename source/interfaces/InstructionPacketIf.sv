@@ -9,6 +9,7 @@ interface InstructionPacketIf;
     instruction_addr_t predictedTarget;
     bpu_index_t        predictorIndex;
     logic [BPU_HISTORY_WIDTH-1:0] historySnapshot;
+    tage_meta_t        tageMeta;
     logic predictedBtbHit;
     logic predictedRasUsed;
 
@@ -19,7 +20,8 @@ interface InstructionPacketIf;
         output predictedTaken,
         output predictedTarget,
         output predictorIndex,
-        output historySnapshot
+        output historySnapshot,
+        output tageMeta
         ,output predictedBtbHit, predictedRasUsed
     );
 
@@ -30,7 +32,8 @@ interface InstructionPacketIf;
         input predictedTaken,
         input predictedTarget,
         input predictorIndex,
-        input historySnapshot
+        input historySnapshot,
+        input tageMeta
         ,input predictedBtbHit, predictedRasUsed
     );
 endinterface

@@ -2,6 +2,7 @@ module BackendCommitStage
     import TypesPkg::*;
 (
     input logic recoveryValid_i,
+    input logic branchTrainReady_i,
     input logic [1:0] robCommitValid_i,
     input rob_entry_t robCommitEntry_i [2],
     input lsq_entry_t lsqHeadEntry_i [2],
@@ -23,6 +24,7 @@ module BackendCommitStage
     logic laneCanCommit;
     integer memoryRetireOffset;
     integer storeCommitCount;
+    integer branchCommitCount;
     integer lane;
 
     always_comb begin
@@ -35,6 +37,7 @@ module BackendCommitStage
         storeAccess_o = MEM_WORD;
         memoryRetireOffset = 0;
         storeCommitCount = 0;
+        branchCommitCount = 0;
         retirePrefix = 1'b1;
         trapValid_o = robCommitValid_i[0] && robCommitEntry_i[0].exception;
         trapPc_o = robCommitEntry_i[0].pc;
@@ -53,10 +56,18 @@ module BackendCommitStage
                         lsqHeadEntry_i[memoryRetireOffset].dataReady &&
                         (storeCommitCount == 0);
             end
+            if (laneCanCommit && robCommitEntry_i[lane].isBranch &&
+                (branchCommitCount != 0))
+                laneCanCommit = 1'b0;
+            if (laneCanCommit && robCommitEntry_i[lane].isBranch &&
+                !branchTrainReady_i)
+                laneCanCommit = 1'b0;
 
             robCommitReady_o[lane] = laneCanCommit;
             if (laneCanCommit) begin
                 robRetireValid_o[lane] = 1'b1;
+                if (robCommitEntry_i[lane].isBranch)
+                    branchCommitCount = branchCommitCount + 1;
                 if (robCommitEntry_i[lane].mret) mretCommit_o = 1'b1;
                 if (robCommitEntry_i[lane].isMemory) begin
                     if (robCommitEntry_i[lane].isStore) begin

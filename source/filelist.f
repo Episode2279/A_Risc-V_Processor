@@ -7,6 +7,12 @@ functional/id/Decoder.sv
 functional/BPU/BranchTargetBuffer.sv
 functional/BPU/GSharePredictor.sv
 functional/BPU/ReturnAddressStack.sv
+functional/BPU/TageFoldedHistory.sv
+functional/BPU/TageHash.sv
+functional/BPU/TageUpdateQueue.sv
+functional/BPU/TageTable.sv
+functional/BPU/StatisticalCorrector.sv
+functional/BPU/TagePredictor.sv
 functional/BPU/BranchPredictionUnit.sv
 functional/rename/RenameMapTable.sv
 functional/rename/PhysicalFreeList.sv

@@ -15,7 +15,12 @@ module topCPU
     parameter logic [ADDR_W-1:0] PC_INCREMENT = 32'd4,
     parameter logic [DATA_W-1:0] UART_TX_MMIO_ADDR = UART_TX_ADDR,
     parameter logic [DATA_W-1:0] FROMHOST_MMIO_ADDR = FROMHOST_ADDR,
-    parameter logic [DATA_W-1:0] TOHOST_MMIO_ADDR = TOHOST_ADDR
+    parameter logic [DATA_W-1:0] TOHOST_MMIO_ADDR = TOHOST_ADDR,
+    parameter bit BPU_TAGE_ENABLE = 1'b1,
+    parameter bit BPU_SC_ENABLE = 1'b1,
+    parameter int BPU_SC_LOW_CONFIDENCE_THRESHOLD = 23,
+    parameter int BPU_SC_WEAK_BASE_WEIGHT = 20,
+    parameter int BPU_SC_STRONG_BASE_WEIGHT = 62
 )
 (
     input  logic              clk,
@@ -120,6 +125,7 @@ module topCPU
     output logic [$clog2(ROB_ENTRY_NUM+1)-1:0] dbg_robCount,
     output logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] dbg_issueCount,
     output logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] dbg_lsqCount,
+    output logic [1:0] dbg_retireCount,
     output logic [63:0] dbg_perfDualIssueCycles, dbg_perfSingleIssueCycles, dbg_perfIqNoReadyCycles,
     output logic [63:0] dbg_perfPort0LsuBlockedCycles, dbg_perfPort0BranchBlockedCycles,
     output logic [63:0] dbg_perfRobFullCycles, dbg_perfIqFullCycles, dbg_perfLsqFullCycles,
@@ -127,7 +133,14 @@ module topCPU
     output logic [63:0] dbg_perfJumpSerializationCycles
     ,output logic [63:0] dbg_perfConditionalCount,dbg_perfConditionalMispredictCount,
     output logic [63:0] dbg_perfDirectionMispredictCount,dbg_perfTargetMispredictCount,dbg_perfBtbMissCount,
-    output logic [63:0] dbg_perfJalMispredictCount,dbg_perfJalrMispredictCount,dbg_perfRasMissCount
+    output logic [63:0] dbg_perfJalMispredictCount,dbg_perfJalrMispredictCount,dbg_perfRasMissCount,
+    output logic dbg_scOverrideEvent,dbg_scCorrectEvent,dbg_scHarmEvent,
+    output logic dbg_branchTrainValid,dbg_branchTrainTaken,
+    output logic dbg_branchTrainTagePrediction,dbg_branchTrainFinalPrediction,
+    output logic dbg_branchTrainStrong,dbg_branchTrainScLowConfidence,
+    output logic [31:0] dbg_branchTrainPc,
+    output logic [63:0] dbg_branchTrainHistory,
+    output logic [15:0] dbg_branchTrainPathHistory
 `endif
 );
 
@@ -188,6 +201,10 @@ module topCPU
     logic [1:0] branchCheckpointValid;
     rob_tag_t branchCheckpointTag [2];
     logic [BPU_HISTORY_WIDTH-1:0] branchCheckpointHistory [2];
+    tage_history_t branchCheckpointTageHistory [2];
+    tage_path_history_t branchCheckpointTagePathHistory [2];
+    bpu_train_t branchTrain;
+    logic bpuUpdateReady;
     logic trapValid;
     instruction_addr_t trapPc;
     logic [5:0] trapCause;
@@ -202,7 +219,14 @@ module topCPU
     bpu_index_t bpuPredictorIndex1;
     logic [BPU_HISTORY_WIDTH-1:0] bpuHistorySnapshot;
     logic [BPU_HISTORY_WIDTH-1:0] bpuHistorySnapshot1;
+    tage_meta_t bpuTageMeta;
+    tage_meta_t bpuTageMeta1;
     logic bpuBtbHit,bpuBtbHit1,bpuRasUsed,bpuRasUsed1;
+    logic bpuPredictionValid;
+    instruction_addr_t bpuRequestPc,bpuRequestPc1;
+    instruction_t bpuRequestInsn,bpuRequestInsn1;
+    instruction_addr_t bpuResponsePc,bpuResponsePc1;
+    instruction_t bpuResponseInsn,bpuResponseInsn1;
 
     logic [1:0] commitValid;
     instruction_addr_t commitPc [2];
@@ -243,31 +267,54 @@ module topCPU
     assign checkData = commitValid[0] ? commitData[0] :
                        commitValid[1] ? commitData[1] : '0;
 
-    BranchPredictionUnit bpu (
+    BranchPredictionUnit #(
+        .TAGE_ENABLE(BPU_TAGE_ENABLE),
+        .SC_ENABLE(BPU_SC_ENABLE),
+        .SC_LOW_CONFIDENCE_THRESHOLD(
+            BPU_SC_LOW_CONFIDENCE_THRESHOLD),
+        .SC_WEAK_BASE_WEIGHT(BPU_SC_WEAK_BASE_WEIGHT),
+        .SC_STRONG_BASE_WEIGHT(BPU_SC_STRONG_BASE_WEIGHT)
+    ) bpu (
         .clk(clk),
         .rst(rst),
-        .queryPc_i(if_fetch_bus.pc),
-        .queryInsn_i(if_fetch_bus.insn),
+        .flush_i(trapValid),
+        .queryPc_i(bpuRequestPc),
+        .queryInsn_i(bpuRequestInsn),
+        .predictionValid_o(bpuPredictionValid),
+        .responsePc_o(bpuResponsePc),
+        .responseInsn_o(bpuResponseInsn),
         .predictTaken_o(btbPredictTaken),
         .predictTarget_o(btbPredictTarget),
         .predictorIndex_o(bpuPredictorIndex),
-        .queryAdvance_i((pc_step != '0) && !jumpEnable),
-        .queryPc1_i(if_fetch_bus1.pc), .queryInsn1_i(if_fetch_bus1.insn),
-        .queryAdvance1_i((pc_step == 32'd8) && !btbPredictTaken && !jumpEnable),
+        .tageMeta_o(bpuTageMeta),
+        .queryAdvance_i(bpuPredictionValid && (pc_step != '0) && !jumpEnable),
+        .queryPc1_i(bpuRequestPc1), .queryInsn1_i(bpuRequestInsn1),
+        .responsePc1_o(bpuResponsePc1), .responseInsn1_o(bpuResponseInsn1),
+        .queryAdvance1_i(bpuPredictionValid && (pc_step == 32'd8) &&
+                         !btbPredictTaken && !jumpEnable),
         .predictTaken1_o(bpuPredictTaken1), .predictTarget1_o(bpuPredictTarget1),
         .predictorIndex1_o(bpuPredictorIndex1),
+        .tageMeta1_o(bpuTageMeta1),
         .historySnapshot_o(bpuHistorySnapshot), .historySnapshot1_o(bpuHistorySnapshot1),
         .btbHit_o(bpuBtbHit),.btbHit1_o(bpuBtbHit1),.rasUsed_o(bpuRasUsed),.rasUsed1_o(bpuRasUsed1),
-        .updateValid_i(branchResolved),
-        .updatePc_i(branchPc),
-        .updateIsConditional_i(branchIsConditional),
-        .updateTaken_i(branchTaken),
-        .updateTarget_i(branchTarget),
-        .updatePredictorIndex_i(branchPredictorIndex),
-        .updateMispredicted_i(branchMispredicted),
-        .updateIsCall_i(branchIsCall), .updateIsReturn_i(branchIsReturn)
-        ,.updateRobTag_i(branchRobTag), .checkpointAllocValid_i(branchCheckpointValid),
-        .checkpointAllocTag_i(branchCheckpointTag), .checkpointAllocHistory_i(branchCheckpointHistory)
+        .updateValid_i(branchTrain.valid),
+        .updatePc_i(branchTrain.pc),
+        .updateIsConditional_i(branchTrain.isConditional),
+        .updateTaken_i(branchTrain.taken),
+        .updateTarget_i(branchTrain.target),
+        .updatePredictorIndex_i(branchTrain.predictorIndex),
+        .updateTageMeta_i(branchTrain.tageMeta),
+        .updateReady_o(bpuUpdateReady),
+        .resolveValid_i(branchResolved), .resolvePc_i(branchPc),
+        .resolveIsConditional_i(branchIsConditional), .resolveTaken_i(branchTaken),
+        .resolveMispredicted_i(branchMispredicted),
+        .resolveIsCall_i(branchIsCall), .resolveIsReturn_i(branchIsReturn),
+        .resolveRobTag_i(branchRobTag), .checkpointAllocValid_i(branchCheckpointValid),
+        .checkpointAllocTag_i(branchCheckpointTag),
+        .checkpointAllocHistory_i(branchCheckpointHistory),
+        .checkpointAllocTageHistory_i(branchCheckpointTageHistory),
+        .checkpointAllocTagePathHistory_i(
+            branchCheckpointTagePathHistory)
     );
 
     DualIfStages #(
@@ -282,14 +329,20 @@ module topCPU
         .rst(rst),
         .jump_address(trapValid ? trapVector : branchRedirect),
         .jump_enable(jumpEnable),
+        .predictionValid_i(bpuPredictionValid),
+        .responsePc_i(bpuResponsePc), .responseInsn_i(bpuResponseInsn),
+        .responsePc1_i(bpuResponsePc1), .responseInsn1_i(bpuResponseInsn1),
         .predictTaken_i(btbPredictTaken),
         .predictTarget_i(btbPredictTarget),
         .predictorIndex_i(bpuPredictorIndex),
         .predictTaken1_i(bpuPredictTaken1), .predictTarget1_i(bpuPredictTarget1),
         .predictorIndex1_i(bpuPredictorIndex1),
         .historySnapshot_i(bpuHistorySnapshot), .historySnapshot1_i(bpuHistorySnapshot1),
+        .tageMeta_i(bpuTageMeta), .tageMeta1_i(bpuTageMeta1),
         .btbHit_i(bpuBtbHit),.btbHit1_i(bpuBtbHit1),.rasUsed_i(bpuRasUsed),.rasUsed1_i(bpuRasUsed1),
         .pc_step_i(pc_step),
+        .requestPc_o(bpuRequestPc), .requestInsn_o(bpuRequestInsn),
+        .requestPc1_o(bpuRequestPc1), .requestInsn1_o(bpuRequestInsn1),
         .fetch_packet0(if_fetch_bus),
         .fetch_packet1(if_fetch_bus1)
     );
@@ -348,7 +401,13 @@ module topCPU
         .branchMispredicted_o(branchMispredicted),
         .branchRedirect_o(branchRedirect),
         .branchRobTag_o(branchRobTag), .branchCheckpointValid_o(branchCheckpointValid),
-        .branchCheckpointTag_o(branchCheckpointTag), .branchCheckpointHistory_o(branchCheckpointHistory),
+        .branchCheckpointTag_o(branchCheckpointTag),
+        .branchCheckpointHistory_o(branchCheckpointHistory),
+        .branchCheckpointTageHistory_o(branchCheckpointTageHistory),
+        .branchCheckpointTagePathHistory_o(
+            branchCheckpointTagePathHistory),
+        .branchTrain_o(branchTrain),
+        .branchTrainReady_i(bpuUpdateReady),
         .trapValid_o(trapValid),
         .trapPc_o(trapPc),
         .trapCause_o(trapCause),
@@ -434,6 +493,7 @@ module topCPU
     assign id_exe_bus.predictedTarget = id_exe_in_bus.predictedTarget;
     assign id_exe_bus.predictorIndex = id_exe_in_bus.predictorIndex;
     assign id_exe_bus.historySnapshot = id_exe_in_bus.historySnapshot;
+    assign id_exe_bus.tageMeta = id_exe_in_bus.tageMeta;
     assign id_exe_bus.predictedBtbHit = id_exe_in_bus.predictedBtbHit;
     assign id_exe_bus.predictedRasUsed = id_exe_in_bus.predictedRasUsed;
     assign id_exe_bus.rd = id_exe_in_bus.rd;
@@ -446,6 +506,7 @@ module topCPU
     assign id_exe1_bus.predictedTarget = id_exe1_in_bus.predictedTarget;
     assign id_exe1_bus.predictorIndex = id_exe1_in_bus.predictorIndex;
     assign id_exe1_bus.historySnapshot = id_exe1_in_bus.historySnapshot;
+    assign id_exe1_bus.tageMeta = id_exe1_in_bus.tageMeta;
     assign id_exe1_bus.predictedBtbHit = id_exe1_in_bus.predictedBtbHit;
     assign id_exe1_bus.predictedRasUsed = id_exe1_in_bus.predictedRasUsed;
     assign id_exe1_bus.rd = id_exe1_in_bus.rd;
@@ -585,6 +646,33 @@ module topCPU
     assign dbg_robCount = robCount;
     assign dbg_issueCount = issueCount;
     assign dbg_lsqCount = lsqCount;
+    assign dbg_retireCount = architecturalRetireCount;
+    assign dbg_scOverrideEvent = branchTrain.valid &&
+        branchTrain.isConditional &&
+        (branchTrain.tageMeta.tagePrediction !=
+         branchTrain.tageMeta.finalPrediction);
+    assign dbg_scCorrectEvent = branchTrain.valid &&
+        branchTrain.isConditional &&
+        (branchTrain.tageMeta.tagePrediction != branchTrain.taken) &&
+        (branchTrain.tageMeta.finalPrediction == branchTrain.taken);
+    assign dbg_scHarmEvent = branchTrain.valid &&
+        branchTrain.isConditional &&
+        (branchTrain.tageMeta.tagePrediction == branchTrain.taken) &&
+        (branchTrain.tageMeta.finalPrediction != branchTrain.taken);
+    assign dbg_branchTrainValid = branchTrain.valid &&
+        branchTrain.isConditional;
+    assign dbg_branchTrainTaken = branchTrain.taken;
+    assign dbg_branchTrainTagePrediction =
+        branchTrain.tageMeta.tagePrediction;
+    assign dbg_branchTrainFinalPrediction =
+        branchTrain.tageMeta.finalPrediction;
+    assign dbg_branchTrainStrong = branchTrain.tageMeta.providerValid &&
+        !branchTrain.tageMeta.providerWeak;
+    assign dbg_branchTrainScLowConfidence =
+        branchTrain.tageMeta.scLowConfidence;
+    assign dbg_branchTrainPc = branchTrain.pc;
+    assign dbg_branchTrainHistory = branchTrain.tageMeta.history;
+    assign dbg_branchTrainPathHistory = branchTrain.tageMeta.pathHistory;
 `endif
 
 endmodule

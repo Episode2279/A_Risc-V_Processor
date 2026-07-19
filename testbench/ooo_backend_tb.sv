@@ -44,11 +44,16 @@ module ooo_backend_tb;
     logic [$clog2(ROB_ENTRY_NUM+1)-1:0] robCount;
     logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount;
     logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] lsqCount;
+    bpu_train_t branchTrain;
+    bpu_train_t lastBranchTrain;
+    integer branchTrainCount;
+    integer trainCountBefore;
 
     assign flush = 1'b0;
 
     OoOBackend dut (
         .clk(clk), .rst(rst), .flush_i(flush),
+        .branchTrainReady_i(1'b1),
         .decode0_bus(decode0), .decode1_bus(decode1),
         .dispatchAccept_o(dispatchAccept), .dispatchStall_o(dispatchStall),
         .memoryReadData_i(memoryReadData), .memoryValid_o(memoryValid),
@@ -65,6 +70,9 @@ module ooo_backend_tb;
         .branchRedirect_o(branchRedirect),
         .branchRobTag_o(), .branchCheckpointValid_o(),
         .branchCheckpointTag_o(), .branchCheckpointHistory_o(),
+        .branchCheckpointTageHistory_o(),
+        .branchCheckpointTagePathHistory_o(),
+        .branchTrain_o(branchTrain),
         .trapValid_o(trapValid), .trapPc_o(trapPc),
         .trapCause_o(trapCause), .trapValue_o(trapValue),
         .mretCommit_o(mretCommit), .commitValid_o(commitValid),
@@ -81,6 +89,16 @@ module ooo_backend_tb;
         .perfJalMispredictCount_o(),.perfJalrMispredictCount_o(),.perfRasMissCount_o()
     );
 
+    always_ff @(posedge clk) begin
+        if (!rst) begin
+            lastBranchTrain <= '0;
+            branchTrainCount <= 0;
+        end else if (branchTrain.valid) begin
+            lastBranchTrain <= branchTrain;
+            branchTrainCount <= branchTrainCount + 1;
+        end
+    end
+
     task automatic tick;
         @(posedge clk);
         #1;
@@ -93,6 +111,10 @@ module ooo_backend_tb;
             decode0.predictedTaken = 1'b0;
             decode0.predictedTarget = '0;
             decode0.predictorIndex = '0;
+            decode0.historySnapshot = '0;
+            decode0.tageMeta = '0;
+            decode0.predictedBtbHit = 1'b0;
+            decode0.predictedRasUsed = 1'b0;
             decode0.registerWriteEnable = 1'b0;
             decode0.dataWriteEnable = 1'b0;
             decode0.wbSelect = WB_ALU;
@@ -128,6 +150,10 @@ module ooo_backend_tb;
             decode1.predictedTaken = 1'b0;
             decode1.predictedTarget = '0;
             decode1.predictorIndex = '0;
+            decode1.historySnapshot = '0;
+            decode1.tageMeta = '0;
+            decode1.predictedBtbHit = 1'b0;
+            decode1.predictedRasUsed = 1'b0;
             decode1.registerWriteEnable = 1'b0;
             decode1.dataWriteEnable = 1'b0;
             decode1.wbSelect = WB_ALU;
@@ -352,6 +378,7 @@ module ooo_backend_tb;
         // unified IQ steers the branch to the branch-capable secondary port
         // and the integer operation to the primary port in the same cycle.
         while (robCount != 0) tick();
+        trainCountBefore = branchTrainCount;
         clear_lane0();
         decode0.valid = 1'b1;
         decode0.pc = 32'h124;
@@ -385,11 +412,23 @@ module ooo_backend_tb;
                    dut.issueUop[0].pc, dut.issueUop[1].pc);
         tick();
         wait_commit(9, 32'd7);
+        // wait_commit observes the combinational retirement candidate. Advance
+        // one edge so the ROB retirement and BPU training are both sampled.
+        tick();
+        if (branchTrainCount != (trainCountBefore + 1) ||
+            lastBranchTrain.pc != 32'h124 || !lastBranchTrain.isConditional ||
+            !lastBranchTrain.taken || lastBranchTrain.target != 32'h134 ||
+            lastBranchTrain.mispredicted)
+            $fatal(1, "correct branch retirement training count=%0d/%0d pc=%h cond=%0b taken=%0b target=%h miss=%0b",
+                   branchTrainCount, trainCountBefore, lastBranchTrain.pc,
+                   lastBranchTrain.isConditional, lastBranchTrain.taken,
+                   lastBranchTrain.target, lastBranchTrain.mispredicted);
 
         // A direction miss squashes a co-issued younger integer operation,
         // suppresses its delayed PRF writeback, restores committed rename
         // state, and permits correct-path work.
         while (robCount != 0) tick();
+        trainCountBefore = branchTrainCount;
         clear_lane0();
         decode0.valid = 1'b1;
         decode0.pc = 32'h130;
@@ -417,6 +456,11 @@ module ooo_backend_tb;
                    robCount, issueCount, lsqCount,
                    dut.recoveryYoungerMask);
         while (robCount != 0) tick();
+        if (branchTrainCount != (trainCountBefore + 1) ||
+            lastBranchTrain.pc != 32'h130 || !lastBranchTrain.isConditional ||
+            lastBranchTrain.taken || !lastBranchTrain.mispredicted ||
+            lastBranchTrain.target != 32'h180)
+            $fatal(1, "mispredicted branch was not trained at retirement");
         set_addi0(32'h134, 11, 10, 1);
         wait_lane0_accept();
         wait_commit(11, 32'd1);

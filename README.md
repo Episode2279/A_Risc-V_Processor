@@ -15,12 +15,26 @@ The official ACT4 RV32I I-extension suite passes all 39 generated self-checking
 tests; its configuration and runner live under `compliance/`.
 
 The unified scheduler can issue two integer operations or pair one integer with
-a branch/CSR/memory operation. Loads can
+a branch/CSR/memory operation. The front end uses a five-table TAGE predictor
+with incremental folded direction history, independently hashed speculative
+Path History, synchronous banked Tag RAM, and grouped pseudorandom allocation
+over a GShare base/alternate. A compact statistical corrector combines one
+PC-bias table with four GEHL components before the final direction is selected;
+target prediction uses a two-way BTB and a RAS. Predictor histories recover
+precisely from ROB-tagged checkpoints. Loads can
 pass known non-aliasing Stores and receive Store-to-Load forwarding; Stores
-become externally visible only at ROB retirement. Branch and CSR operations use
-the ROB/PRF path but remain temporarily serialized.
+become externally visible only at ROB retirement. Multiple branches may remain
+unresolved and execute out of order; CSR/FENCE/trap-class operations retain the
+serialized path.
 See `source/functional/OoO/README.md` for implemented invariants and remaining
 performance work.
+
+Under the project's CBP-style accounting, the logical conditional-direction
+predictor state is 32,553 bits (4,069.125 bytes), 215 bits below the 4 KiB
+limit. This is not the synthesized physical-memory total: dual-lane table
+copies, multiport banking/replication, recovery checkpoints, update metadata,
+BTB, and RAS remain real hardware outside that logical-capacity count. See
+`SPEC.md` and `source/functional/BPU/README.md` for the itemized budget.
 
 The project includes a Verilator simulation flow, a Vivado-oriented SystemVerilog
 testbench, CoreMark bare-metal software, memory-image generation, UART MMIO
@@ -64,13 +78,18 @@ make sim
 - Builds `source/obj_dir/VtopCPU`
 - Runs the simulation until `tohost` or timeout
 
-Expected successful output includes:
+The authoritative successful termination is:
 
 ```text
-Correct operation validated.
 toHost=0x00000001
 ***** simulation result: SUCCESS *****
 ```
+
+With the default 10-iteration simulation, CoreMark may also print
+`Errors detected`. The expected CRCs are still produced; this message is its
+standard validation warning because the simulated run represents less than the
+required 10 seconds. It is not a CPU-functional failure when `tohost` reports
+success.
 
 ## Useful Make Targets
 
@@ -78,6 +97,10 @@ toHost=0x00000001
 make help            # Show available targets
 make coremark        # Rebuild CoreMark ELF and memory images only
 make lint            # Verilator lint for RTL plus SV testbench
+make bpu-smoke       # Test GShare/BTB behavior
+make tage-smoke      # Test TAGE folds, hashes, tables, and history recovery
+make tage-update-smoke # Test the retirement-training FIFO and backpressure
+make sc-smoke        # Test statistical-corrector timing/training/forwarding
 make ooo-smoke       # Test RAT/PRF/ROB/IQ/LSQ structures
 make ooo-backend-smoke # Test OoO dispatch/execute/commit behavior
 make build           # Build the Verilated topCPU executable
@@ -164,6 +187,7 @@ Key source directories:
 - `source/TypesPkg.sv`: shared types, widths, memory sizes, MMIO addresses
 - `source/interfaces`: SystemVerilog bus interfaces/modports
 - `source/functional/id`: instruction decoding
+- `source/functional/BPU`: GShare/TAGE/SC-Lite direction prediction, BTB, and RAS
 - `source/functional/rename`: RAT, committed map, physical free list, and dispatch
 - `source/functional/issue`: physical-tag issue queue and wakeup/select logic
 - `source/functional/exe`: ALU, OoO execution, branch resolution, and CSR state
