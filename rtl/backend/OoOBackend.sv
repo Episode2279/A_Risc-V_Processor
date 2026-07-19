@@ -65,7 +65,7 @@ module OoOBackend
     output logic [1:0] retireCount_o,
 
     output logic [$clog2(ROB_ENTRY_NUM+1)-1:0] robCount_o,
-    output logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount_o,
+    output logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] issueCount_o,
     output logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] lsqCount_o,
     output logic [63:0] perfDualIssueCycles_o, perfSingleIssueCycles_o, perfIqNoReadyCycles_o,
     output logic [63:0] perfPort0LsuBlockedCycles_o, perfPort0BranchBlockedCycles_o,
@@ -137,7 +137,7 @@ module OoOBackend
     logic issueFallbackReady;
     logic issueEmpty;
     logic issueFull;
-    logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount;
+    logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] issueCount;
 
     logic [1:0] lsqAllocValid;
     logic [1:0] lsqAllocReady;
@@ -174,6 +174,7 @@ module OoOBackend
     rob_tag_t lsuLoadRequestId;
     logic lsuIsStore;
     word_t lsuAddress;
+    logic lsuStoreDataValid;
     word_t lsuStoreData;
     mem_access_t lsuMemoryAccess;
     lsq_tag_t lsuTag;
@@ -293,7 +294,7 @@ module OoOBackend
         lsqStoreDataTag[1] = '0;
         lsqStoreData[0] = lsuStoreData;
         lsqStoreData[1] = '0;
-        lsqStoreDataValid[0] = lsuExecuteValid && lsuIsStore;
+        lsqStoreDataValid[0] = lsuStoreDataValid;
 
         issueCount_o = issueCount;
         recoveryValid = branchMispredicted_o;
@@ -731,7 +732,9 @@ module OoOBackend
         .csrValid_o(csrValid_o), .csrOp_o(csrOp_o), .csrAddr_o(csrAddr_o),
         .csrWriteData_o(csrWriteData_o), .lsuExecuteValid_o(lsuExecuteValid),
         .lsuLoadReadValid_o(lsuLoadReadValid), .lsuIsStore_o(lsuIsStore),
-        .lsuAddress_o(lsuAddress), .lsuStoreData_o(lsuStoreData),
+        .lsuAddress_o(lsuAddress),
+        .lsuStoreDataValid_o(lsuStoreDataValid),
+        .lsuStoreData_o(lsuStoreData),
         .lsuMemoryAccess_o(lsuMemoryAccess), .lsuTag_o(lsuTag)
         ,.lsuLoadRequestId_o(lsuLoadRequestId)
     );
@@ -755,6 +758,9 @@ module OoOBackend
         .storeDataValid_i(lsqStoreDataValid),
         .storeDataTag_i(lsqStoreDataTag),
         .storeData_i(lsqStoreData),
+        .dataWakeupValid_i(prfWritebackValid),
+        .dataWakeupPhys_i(prfWritebackPhys),
+        .dataWakeupValue_i(prfWritebackData),
         .issueValid_i(lsuCandidateValid),
         .issueTag_i(lsuTag),
         .issueAddress_i(lsuAddress),

@@ -28,6 +28,12 @@ module LoadStoreQueue
     input  lsq_tag_t storeDataTag_i [UPDATE_WIDTH],
     input  word_t storeData_i [UPDATE_WIDTH],
 
+    // Store data may become ready after its address uop has left the IQ. The
+    // LSQ therefore snoops the ordinary PRF writeback buses by physical tag.
+    input  logic [UPDATE_WIDTH-1:0] dataWakeupValid_i,
+    input  phys_reg_addr_t dataWakeupPhys_i [UPDATE_WIDTH],
+    input  word_t dataWakeupValue_i [UPDATE_WIDTH],
+
     // Ordering query for the oldest ready memory-queue operation. Stores may
     // always calculate their address/data. A load waits for every older store
     // address, and either reads memory or forwards from the youngest older
@@ -291,6 +297,24 @@ module LoadStoreQueue
                         storeData_i[seqLane];
                 end
             end
+            for (entryIndex = 0; entryIndex < DEPTH;
+                 entryIndex = entryIndex + 1) begin
+                if (entries[entryIndex].valid &&
+                    entries[entryIndex].isStore &&
+                    !entries[entryIndex].dataReady &&
+                    !recoverYoungerMask_i[entries[entryIndex].robTag]) begin
+                    for (seqLane = 0; seqLane < UPDATE_WIDTH;
+                         seqLane = seqLane + 1) begin
+                        if (dataWakeupValid_i[seqLane] &&
+                            (dataWakeupPhys_i[seqLane] ==
+                             entries[entryIndex].storeDataPhys)) begin
+                            entries[entryIndex].dataReady <= 1'b1;
+                            entries[entryIndex].storeData <=
+                                dataWakeupValue_i[seqLane];
+                        end
+                    end
+                end
+            end
             tailPtr <= addPtr(headPtr, recoveryRetainedCount);
             entryCount <= recoveryRetainedCount;
         end else begin
@@ -302,6 +326,11 @@ module LoadStoreQueue
                 if (allocValid_i[seqLane] && allocReady_o[seqLane]) begin
                     entries[allocTag_o[seqLane]] <= allocEntry_i[seqLane];
                     entries[allocTag_o[seqLane]].valid <= 1'b1;
+                    if (allocEntry_i[seqLane].isStore &&
+                        (allocEntry_i[seqLane].storeDataPhys == '0)) begin
+                        entries[allocTag_o[seqLane]].dataReady <= 1'b1;
+                        entries[allocTag_o[seqLane]].storeData <= '0;
+                    end
                 end
             end
 
@@ -313,6 +342,24 @@ module LoadStoreQueue
                 if (storeDataValid_i[seqLane] && entries[storeDataTag_i[seqLane]].valid) begin
                     entries[storeDataTag_i[seqLane]].dataReady <= 1'b1;
                     entries[storeDataTag_i[seqLane]].storeData <= storeData_i[seqLane];
+                end
+            end
+
+            for (entryIndex = 0; entryIndex < DEPTH;
+                 entryIndex = entryIndex + 1) begin
+                if (entries[entryIndex].valid &&
+                    entries[entryIndex].isStore &&
+                    !entries[entryIndex].dataReady) begin
+                    for (seqLane = 0; seqLane < UPDATE_WIDTH;
+                         seqLane = seqLane + 1) begin
+                        if (dataWakeupValid_i[seqLane] &&
+                            (dataWakeupPhys_i[seqLane] ==
+                             entries[entryIndex].storeDataPhys)) begin
+                            entries[entryIndex].dataReady <= 1'b1;
+                            entries[entryIndex].storeData <=
+                                dataWakeupValue_i[seqLane];
+                        end
+                    end
                 end
             end
 

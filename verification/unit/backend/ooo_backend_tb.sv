@@ -47,7 +47,7 @@ module ooo_backend_tb;
     word_t commitData [2];
     logic [1:0] retireCount;
     logic [$clog2(ROB_ENTRY_NUM+1)-1:0] robCount;
-    logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount;
+    logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] issueCount;
     logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] lsqCount;
     bpu_train_t branchTrain;
     bpu_train_t lastBranchTrain;

@@ -1,7 +1,7 @@
 module BackendIssueStage
     import TypesPkg::*;
 #(
-    parameter int DEPTH = ISSUE_QUEUE_ENTRY_NUM + LSQ_ENTRY_NUM
+    parameter int DEPTH = UNIFIED_IQ_ENTRY_NUM
 )(
     input logic clk,
     input logic rst,

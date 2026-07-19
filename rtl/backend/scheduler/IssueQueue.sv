@@ -1,7 +1,7 @@
 module IssueQueue
     import TypesPkg::*;
 #(
-    parameter int DEPTH = ISSUE_QUEUE_ENTRY_NUM,
+    parameter int DEPTH = UNIFIED_IQ_ENTRY_NUM,
     parameter int DISPATCH_WIDTH = 2,
     parameter int ISSUE_WIDTH = 2,
     parameter int WAKEUP_WIDTH = 2,
@@ -55,6 +55,8 @@ module IssueQueue
     integer fallbackIndex;
     logic [AGE_W-1:0] fallbackAge;
     logic readyEntry [DEPTH];
+    logic source1ReadyNow [DEPTH];
+    logic source2ReadyNow [DEPTH];
 
     function automatic logic sourceReadyNow(
         input phys_reg_addr_t sourcePhys,
@@ -115,13 +117,22 @@ module IssueQueue
         fallbackValid_o = 1'b0;
         fallbackUop_o = '0;
         for (combEntryIndex = 0; combEntryIndex < DEPTH; combEntryIndex = combEntryIndex + 1) begin
+            source1ReadyNow[combEntryIndex] = sourceReadyNow(
+                entries[combEntryIndex].src1Phys,
+                entries[combEntryIndex].src1Ready,
+                entries[combEntryIndex].useRs1);
+            source2ReadyNow[combEntryIndex] = sourceReadyNow(
+                entries[combEntryIndex].src2Phys,
+                entries[combEntryIndex].src2Ready,
+                entries[combEntryIndex].useRs2);
+            // A Store may leave the IQ as soon as its address source is ready.
+            // Its data tag remains in the LSQ and is filled by writeback snoop
+            // if the data source has not completed yet.
             readyEntry[combEntryIndex] = entries[combEntryIndex].valid &&
-                sourceReadyNow(entries[combEntryIndex].src1Phys,
-                               entries[combEntryIndex].src1Ready,
-                               entries[combEntryIndex].useRs1) &&
-                sourceReadyNow(entries[combEntryIndex].src2Phys,
-                               entries[combEntryIndex].src2Ready,
-                               entries[combEntryIndex].useRs2);
+                source1ReadyNow[combEntryIndex] &&
+                ((entries[combEntryIndex].fuClass == FU_MEMORY &&
+                  entries[combEntryIndex].dataWriteEnable) ||
+                 source2ReadyNow[combEntryIndex]);
         end
 
         // Reserve port 0 for memory/CSR when one is ready. Port 1 has its own
@@ -202,8 +213,10 @@ module IssueQueue
             issueValid_o[combLane] = (selectedIndex[combLane] >= 0);
             if (selectedIndex[combLane] >= 0) begin
                 issueUop_o[combLane] = entries[selectedIndex[combLane]];
-                issueUop_o[combLane].src1Ready = 1'b1;
-                issueUop_o[combLane].src2Ready = 1'b1;
+                issueUop_o[combLane].src1Ready =
+                    source1ReadyNow[selectedIndex[combLane]];
+                issueUop_o[combLane].src2Ready =
+                    source2ReadyNow[selectedIndex[combLane]];
             end
         end
         fallbackValid_o = (fallbackIndex >= 0);

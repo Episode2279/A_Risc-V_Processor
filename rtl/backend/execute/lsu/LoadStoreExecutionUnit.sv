@@ -42,6 +42,7 @@ module LoadStoreExecutionUnit
     output rob_tag_t loadRequestId_o,
     output logic isStore_o,
     output word_t address_o,
+    output logic storeDataValid_o,
     output word_t storeData_o,
     output mem_access_t memoryAccess_o,
     output lsq_tag_t lsqTag_o,
@@ -127,6 +128,8 @@ module LoadStoreExecutionUnit
     assign loadRequestId_o = issueUop_i.robTag;
     assign isStore_o = selectedIsStore;
     assign address_o = address;
+    assign storeDataValid_o = executeValid_o && selectedIsStore &&
+        issueUop_i.src2Ready;
     assign storeData_o = sourceB_i;
     assign memoryAccess_o = issueUop_i.memCtr;
     assign lsqTag_o = issueUop_i.lsqTag;

@@ -7,7 +7,7 @@ The former sequential execute/memory/writeback pipeline has been removed.
 
 1. `DualIfStages` launches an F0 `PC`/`PC+4` request into the synchronous
    I-cache and BPU in parallel. Their aligned F1 response supplies two
-   instructions to `DualIF_IDRegister`; an I-cache miss blocks and refills the
+   instructions into the eight-entry `FetchQueue`; an I-cache miss blocks and refills the
    missing 16-byte line before the response becomes valid.
 2. Two `IdStages` decoders produce architectural-register micro-operations.
 3. `DispatchControl` atomically reserves every resource an accepted operation

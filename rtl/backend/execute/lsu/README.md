@@ -1,12 +1,14 @@
 Memory-side functional blocks live here:
 
 - `LoadStoreQueue.sv` allocates memory operations in program order and records
-  address/store-data readiness, checks older Stores, and provides forwarding.
+  independent address/store-data readiness, snoops delayed Store data by
+  physical tag, checks older Stores, and provides forwarding.
 - `LoadStoreExecutionUnit.sv` computes effective addresses and completes Loads
-  or records Store address/data.
+  or records a Store address; Store data may arrive on the same issue or later
+  through PRF writeback snooping.
 
 The cache/memory/MMIO stage wrapper is located at
-`../../backEnd/pipeStages/MEMStages.sv`. It connects the LSU to a 1 KiB,
+`../../../memory/subsystem/MEMStages.sv`. It connects the LSU to a 1 KiB,
 64-set, direct-mapped D-cache with 16-byte lines. Its elastic synchronous hit
 pipeline can accept one cached Load per cycle. A single tagged MSHR implements
 critical-word-first, early restart, and different-set hit-under-miss. Retiring
@@ -41,7 +43,7 @@ deliberately has no speculative flush/recovery path. MMIO Stores bypass the
 FIFO but remain precise and wait for older buffered Stores. FENCE/CSR
 serialization additionally waits until the D-cache/backing-memory wrapper is
 idle. Load replay and memory-dependence prediction are not implemented; see
-`../OoO/README.md`.
+`../../docs/OoO.md`.
 
 Directed checks are available as `make store-buffer-smoke` (FIFO behavior,
 byte-merge query logic, youngest-Store priority, and full-queue drain/enqueue) and

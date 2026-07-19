@@ -68,6 +68,7 @@ module BackendExecuteStage
     output logic lsuLoadReadValid_o,
     output logic lsuIsStore_o,
     output word_t lsuAddress_o,
+    output logic lsuStoreDataValid_o,
     output word_t lsuStoreData_o,
     output mem_access_t lsuMemoryAccess_o,
     output lsq_tag_t lsuTag_o,
@@ -334,7 +335,8 @@ module BackendExecuteStage
         .writebackData_o(mWD), .executeValid_o(lsuExecuteValid_o),
         .loadReadValid_o(lsuLoadReadValid_o),
         .loadRequestId_o(lsuLoadRequestId_o), .isStore_o(lsuIsStore_o),
-        .address_o(lsuAddress_o), .storeData_o(lsuStoreData_o),
+        .address_o(lsuAddress_o), .storeDataValid_o(lsuStoreDataValid_o),
+        .storeData_o(lsuStoreData_o),
         .memoryAccess_o(lsuMemoryAccess_o), .lsqTag_o(lsuTag_o),
         .completionReady_i(1'b1)
     );

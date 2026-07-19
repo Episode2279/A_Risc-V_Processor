@@ -69,7 +69,7 @@ module ooo_smoke_tb;
     logic iqFallbackReady;
     logic iqEmpty;
     logic iqFull;
-    logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+1)-1:0] iqCount;
+    logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] iqCount;
 
     logic [1:0] lsqAllocValid;
     lsq_entry_t lsqAllocEntry [2];
@@ -169,6 +169,9 @@ module ooo_smoke_tb;
         .addressValid_i(lsqAddressValid), .addressTag_i(lsqAddressTag),
         .address_i(lsqAddress), .storeDataValid_i(lsqStoreDataValid),
         .storeDataTag_i(lsqStoreDataTag), .storeData_i(lsqStoreData),
+        .dataWakeupValid_i(prfWriteValid),
+        .dataWakeupPhys_i(prfWritePhys),
+        .dataWakeupValue_i(prfWriteData),
         .issueValid_i(lsqIssueValid), .issueTag_i(lsqIssueTag),
         .issueAddress_i(lsqIssueAddress), .issueMemCtr_i(lsqIssueMemCtr),
         .issueReady_o(lsqIssueReady),
@@ -430,6 +433,30 @@ module ooo_smoke_tb;
         iqIssueReady = 2'b00;
         if (!iqEmpty) $fatal(1, "IQ failed to retire retained memory candidate");
 
+        // A Store becomes schedulable when its address source is ready even
+        // if its data source is still pending. The outgoing uop must preserve
+        // src2Ready=0 so the LSU does not capture stale PRF data.
+        iqDispatch[0].valid = 1'b1;
+        iqDispatch[0].fuClass = FU_MEMORY;
+        iqDispatch[0].dataWriteEnable = 1'b1;
+        iqDispatch[0].useRs1 = 1'b1;
+        iqDispatch[0].useRs2 = 1'b1;
+        iqDispatch[0].src1Phys = phys_reg_addr_t'(1);
+        iqDispatch[0].src1Ready = 1'b1;
+        iqDispatch[0].src2Phys = phys_reg_addr_t'(37);
+        iqDispatch[0].src2Ready = 1'b0;
+        iqDispatch[0].pc = 32'h31c;
+        tick();
+        iqDispatch = '{default:'0};
+        #1;
+        if (!iqIssueValid[0] || (iqIssueUop[0].pc != 32'h31c) ||
+            iqIssueUop[0].src2Ready)
+            $fatal(1, "IQ did not split Store address/data readiness");
+        iqIssueReady = 2'b01;
+        tick();
+        iqIssueReady = 2'b00;
+        if (!iqEmpty) $fatal(1, "address-ready Store did not leave IQ");
+
         // A recovery can coincide with both issue handshakes.  The older Load
         // on port 0 survives the branch's younger mask architecturally, but it
         // has nevertheless left the IQ and must not remain as a stale entry
@@ -472,6 +499,7 @@ module ooo_smoke_tb;
         lsqAllocEntry[0].isStore = 1'b1;
         lsqAllocEntry[0].robTag = 3;
         lsqAllocEntry[0].memCtr = MEM_WORD;
+        lsqAllocEntry[0].storeDataPhys = phys_reg_addr_t'(37);
         lsqAllocEntry[1].isLoad = 1'b1;
         lsqAllocEntry[1].robTag = 4;
         lsqAllocEntry[1].memCtr = MEM_WORD;
@@ -490,12 +518,14 @@ module ooo_smoke_tb;
         lsqAddressValid[0] = 1'b1;
         lsqAddressTag[0] = savedLsqTag;
         lsqAddress[0] = 32'h200;
-        lsqStoreDataValid[0] = 1'b1;
-        lsqStoreDataTag[0] = savedLsqTag;
-        lsqStoreData[0] = 32'hCAFE_BABE;
+        // Data arrives independently over the PRF writeback broadcast after
+        // the Store address has already executed.
+        prfWriteValid[0] = 1'b1;
+        prfWritePhys[0] = phys_reg_addr_t'(37);
+        prfWriteData[0] = 32'hCAFE_BABE;
         tick();
         lsqAddressValid = '0;
-        lsqStoreDataValid = '0;
+        prfWriteValid = '0;
         if (!lsqHead[0].addressReady || !lsqHead[0].dataReady ||
             lsqHead[0].address != 32'h200 || lsqHead[0].storeData != 32'hCAFE_BABE)
             $fatal(1, "LSQ readiness update failed");

@@ -237,6 +237,8 @@ module RenameStage
             lsqEntry_o[packLane].destPhys = destinationPhys_o[packLane];
             lsqEntry_o[packLane].memCtr = renamedUop_o[packLane].memCtr;
             lsqEntry_o[packLane].pc = renamedUop_o[packLane].pc;
+            lsqEntry_o[packLane].storeDataPhys =
+                renamedUop_o[packLane].src2Phys;
         end
     end
 

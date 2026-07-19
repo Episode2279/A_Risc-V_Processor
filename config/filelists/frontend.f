@@ -9,6 +9,6 @@ rtl/frontend/bpu/TageTable.sv
 rtl/frontend/bpu/StatisticalCorrector.sv
 rtl/frontend/bpu/TagePredictor.sv
 rtl/frontend/bpu/BranchPredictionUnit.sv
-rtl/frontend/fetch/DualIF_IDRegister.sv
+rtl/frontend/fetch/FetchQueue.sv
 rtl/frontend/fetch/DualIfStages.sv
 rtl/frontend/decode/IdStages.sv

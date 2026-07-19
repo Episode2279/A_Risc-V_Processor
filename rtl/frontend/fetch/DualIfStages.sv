@@ -32,8 +32,10 @@ module DualIfStages
     input  tage_meta_t        tageMeta_i,
     input  tage_meta_t        tageMeta1_i,
     input  logic btbHit_i,btbHit1_i,rasUsed_i,rasUsed1_i,
-    // pc_step_i is 0/4/8 for stall, single issue, or dual issue.
-    input  logic [ADDR_W-1:0] pc_step_i,
+    // The fetch queue accepts the whole predicted bundle atomically. A slot-0
+    // taken prediction contains one instruction; all other bundles contain two.
+    input  logic              responseReady_i,
+    output logic              responseConsumed_o,
 
     // F0 request handshake. requestValid_o is an accepted-request pulse: the
     // instruction cache and BPU sample requestPc_o/requestPc1_o together on an
@@ -84,7 +86,8 @@ module DualIfStages
     assign predictionResponseUsable = cacheResponseValid &&
         predictionValid_i && !jump_enable;
     assign predictionResponseConsumed = predictionResponseUsable &&
-        (pc_step_i != '0);
+        responseReady_i;
+    assign responseConsumed_o = predictionResponseConsumed;
     assign cacheResponseReady = jump_enable || predictionResponseConsumed;
     assign cacheResponseValid_o = cacheResponseValid;
 
@@ -99,11 +102,11 @@ module DualIfStages
         else if (predictionResponseConsumed) begin
             if (predictTaken_i)
                 nextRequestPc = predictTarget_i;
-            else if (predictTaken1_i &&
-                     (pc_step_i == (PC_INCREMENT + PC_INCREMENT)))
+            else if (predictTaken1_i)
                 nextRequestPc = predictTarget1_i;
             else
-                nextRequestPc = responsePc_i + pc_step_i;
+                nextRequestPc = responsePc_i +
+                    (PC_INCREMENT + PC_INCREMENT);
         end
     end
 
@@ -130,9 +133,9 @@ module DualIfStages
     assign fetch_packet1.pc = predictionResponseUsable ? responsePc1_i : RESET_PC;
     assign fetch_packet0.insn = predictionResponseUsable ? cacheResponseInsn : '0;
     assign fetch_packet1.insn = predictionResponseUsable &&
-        !(predictTaken_i && (pc_step_i != '0)) ? cacheResponseInsn1 : '0;
+        !predictTaken_i ? cacheResponseInsn1 : '0;
     assign fetch_packet0.predictedTaken = predictionResponseUsable &&
-        predictTaken_i && (pc_step_i != '0);
+        predictTaken_i;
     assign fetch_packet0.predictedTarget = predictionResponseUsable ?
         predictTarget_i : '0;
     assign fetch_packet0.predictorIndex = predictionResponseUsable ?
@@ -144,8 +147,7 @@ module DualIfStages
     assign fetch_packet0.predictedRasUsed = predictionResponseUsable && rasUsed_i;
 
     assign fetch_packet1.predictedTaken = predictionResponseUsable &&
-        predictTaken1_i && !predictTaken_i &&
-        (pc_step_i == (PC_INCREMENT + PC_INCREMENT));
+        predictTaken1_i && !predictTaken_i;
     assign fetch_packet1.predictedTarget = predictionResponseUsable ?
         predictTarget1_i : '0;
     assign fetch_packet1.predictorIndex = predictionResponseUsable ?

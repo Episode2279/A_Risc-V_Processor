@@ -39,6 +39,7 @@ module lsu_pending_tb;
     rob_tag_t loadRequestId;
     logic isStore;
     word_t address;
+    logic storeDataValid;
     word_t storeData;
     mem_access_t memoryAccess;
     lsq_tag_t lsqTag;
@@ -82,6 +83,7 @@ module lsu_pending_tb;
         .loadRequestId_o(loadRequestId),
         .isStore_o(isStore),
         .address_o(address),
+        .storeDataValid_o(storeDataValid),
         .storeData_o(storeData),
         .memoryAccess_o(memoryAccess),
         .lsqTag_o(lsqTag),

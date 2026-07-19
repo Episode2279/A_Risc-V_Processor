@@ -8,7 +8,7 @@ module BackendPerformanceCounters
     input renamed_uop_t issueUop_i [2],
     input logic fallbackValid_i,
     input logic fallbackReady_i,
-    input logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0]
+    input logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0]
         issueCount_i,
     input logic robFull_i,
     input logic iqFull_i,

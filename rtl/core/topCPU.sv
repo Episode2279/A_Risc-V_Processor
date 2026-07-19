@@ -12,6 +12,7 @@ module topCPU
     parameter int DATA_MEM_BYTES = DATA_ADDR_SIZE,
     parameter int ICACHE_BYTES = 4096,
     parameter int ICACHE_LINE_BYTES = 16,
+    parameter int FETCH_QUEUE_ENTRIES = 8,
     parameter int DCACHE_SET_COUNT = 64,
     parameter int DCACHE_LINE_BYTES = 16,
     parameter logic [DATA_W-1:0] STATE_RESET_VALUE = '0,
@@ -129,7 +130,7 @@ module topCPU
     output logic [DATA_W-1:0] dbg_wb1_rdData,
     output logic [DATA_W-1:0] dbg_wb1_dataWb,
     output logic [$clog2(ROB_ENTRY_NUM+1)-1:0] dbg_robCount,
-    output logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] dbg_issueCount,
+    output logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] dbg_issueCount,
     output logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] dbg_lsqCount,
     output logic [1:0] dbg_retireCount,
     output logic [63:0] dbg_perfDualIssueCycles, dbg_perfSingleIssueCycles, dbg_perfIqNoReadyCycles,
@@ -209,8 +210,9 @@ module topCPU
 
     logic [1:0] dispatchAccept;
     logic dispatchStall;
-    logic [ADDR_W-1:0] pc_step;
-    logic refillPredictedPair;
+    logic fetchQueueReady;
+    logic fetchResponseConsumed;
+    logic [$clog2(FETCH_QUEUE_ENTRIES+1)-1:0] fetchQueueCount;
     logic wrEnable;
     logic stall;
     logic issue0;
@@ -312,7 +314,7 @@ module topCPU
     logic [1:0] retireCount;
     logic [1:0] architecturalRetireCount;
     logic [$clog2(ROB_ENTRY_NUM+1)-1:0] robCount;
-    logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount;
+    logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] issueCount;
     logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] lsqCount;
 
     logic [DATA_W-1:0] aluOut_exe;
@@ -331,14 +333,6 @@ module topCPU
     assign jumpEnable = trapValid || (branchResolved && branchMispredicted);
     assign flush = jumpEnable;
     assign architecturalRetireCount = retireCount;
-    assign refillPredictedPair = issue0 && !id_exe1_in_bus.valid &&
-                                 id_exe_in_bus.predictedTaken;
-    assign pc_step = (!id_exe_in_bus.valid && !id_exe1_in_bus.valid) ?
-                     (PC_INCREMENT + PC_INCREMENT) :
-                     issue1 ? (PC_INCREMENT + PC_INCREMENT) :
-                     refillPredictedPair ? (PC_INCREMENT + PC_INCREMENT) :
-                     issue0 ? PC_INCREMENT : '0;
-
     assign check = if_fetch_bus.insn;
     assign checkPC = if_fetch_bus.pc;
     assign checkData = commitValid[0] ? commitData[0] :
@@ -368,10 +362,10 @@ module topCPU
         .predictTarget_o(btbPredictTarget),
         .predictorIndex_o(bpuPredictorIndex),
         .tageMeta_o(bpuTageMeta),
-        .queryAdvance_i(bpuPredictionValid && (pc_step != '0) && !jumpEnable),
+        .queryAdvance_i(fetchResponseConsumed && !jumpEnable),
         .queryPc1_i(bpuRequestPc1), .queryInsn1_i(bpuRequestInsn1),
         .responsePc1_o(bpuResponsePc1), .responseInsn1_o(bpuResponseInsn1),
-        .queryAdvance1_i(bpuPredictionValid && (pc_step == 32'd8) &&
+        .queryAdvance1_i(fetchResponseConsumed &&
                          !btbPredictTaken && !jumpEnable),
         .predictTaken1_o(bpuPredictTaken1), .predictTarget1_o(bpuPredictTarget1),
         .predictorIndex1_o(bpuPredictorIndex1),
@@ -423,7 +417,8 @@ module topCPU
         .historySnapshot_i(bpuHistorySnapshot), .historySnapshot1_i(bpuHistorySnapshot1),
         .tageMeta_i(bpuTageMeta), .tageMeta1_i(bpuTageMeta1),
         .btbHit_i(bpuBtbHit),.btbHit1_i(bpuBtbHit1),.rasUsed_i(bpuRasUsed),.rasUsed1_i(bpuRasUsed1),
-        .pc_step_i(pc_step),
+        .responseReady_i(fetchQueueReady),
+        .responseConsumed_o(fetchResponseConsumed),
         .requestReady_i(bpuQueryReady),
         .requestValid_o(bpuQueryValid),
         .requestPc_o(bpuRequestPc), .requestInsn_o(bpuRequestInsn),
@@ -443,19 +438,20 @@ module topCPU
         .fetch_packet1(if_fetch_bus1)
     );
 
-    DualIF_IDRegister #(
-        .RESET_PC(RESET_PC)
-    ) if_id (
+    FetchQueue #(
+        .DEPTH(FETCH_QUEUE_ENTRIES)
+    ) fetchQueue (
         .clk(clk),
         .rst(rst),
         .fetch0_i(if_fetch_bus),
         .fetch1_i(if_fetch_bus1),
-        .stall(stall),
-        .flush(flush),
-        .issue0(issue0),
-        .issue1(issue1),
+        .flush_i(flush),
+        .fetchReady_o(fetchQueueReady),
+        .issue0_i(issue0),
+        .issue1_i(issue1),
         .packet0_o(if_decode_bus),
-        .packet1_o(if_decode_bus1)
+        .packet1_o(if_decode_bus1),
+        .count_o(fetchQueueCount)
     );
 
     IdStages idStage (

@@ -6,7 +6,7 @@ module BackendDispatchStage
     input logic [1:0] laneWritesDestination_i,
     input logic [1:0] laneIsMemory_i,
     input logic [$clog2(ROB_ENTRY_NUM+1)-1:0] robCount_i,
-    input logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount_i,
+    input logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] issueCount_i,
     input logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] lsqCount_i,
     input logic [$clog2(PHYS_REG_NUM+1)-1:0] freePhysCount_i,
     output logic [1:0] accept_o,

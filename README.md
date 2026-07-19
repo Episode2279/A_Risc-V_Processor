@@ -7,6 +7,11 @@ dual fetch/decode feeds register rename, a unified dual-issue queue, physical
 register file, reorder buffer, load/store queue, execution, and in-order retirement.
 The former sequential execute/memory/writeback pipeline has been removed.
 
+An eight-entry, two-wide Fetch Queue decouples the synchronous I-cache/BPU F1
+response from decode. The unified IQ and LSQ are independently sized at 16
+entries each. Stores may generate their address before their data is ready;
+the LSQ retains the Store-data physical tag and captures a later PRF writeback.
+
 The RV32I path now performs strict illegal-instruction decoding, serializes
 FENCE, and takes precise ROB-head traps for ECALL, EBREAK, instruction-address
 misalignment, and load/store-address misalignment. Basic machine trap entry and
@@ -223,7 +228,7 @@ or "stage" buckets:
 
 - `rtl/core`: top-level CPU composition
 - `rtl/common`: shared types and interfaces
-- `rtl/frontend/{fetch,decode,bpu}`: fetch window, decoder, BTB/RAS/TAGE/SC
+- `rtl/frontend/{fetch,decode,bpu}`: buffered fetch queue, decoder, BTB/RAS/TAGE/SC
 - `rtl/backend/{dispatch,rename,scheduler,regfile,execute,retire,perf}`: OoO data
   path and control, with LSU/CSR/integer execution grouped below `execute/`
 - `rtl/memory/{icache,dcache,backing,subsystem}`: cache hierarchy and backing

@@ -10,7 +10,7 @@ module DispatchControl
     input  logic [WIDTH-1:0] laneIsMemory_i,
 
     input  logic [$clog2(ROB_ENTRY_NUM+1)-1:0] robCount_i,
-    input  logic [$clog2(ISSUE_QUEUE_ENTRY_NUM+LSQ_ENTRY_NUM+1)-1:0] issueCount_i,
+    input  logic [$clog2(UNIFIED_IQ_ENTRY_NUM+1)-1:0] issueCount_i,
     input  logic [$clog2(LSQ_ENTRY_NUM+1)-1:0] lsqCount_i,
     input  logic [$clog2(PHYS_REG_NUM+1)-1:0] freePhysCount_i,
 
@@ -28,7 +28,7 @@ module DispatchControl
 
     always_comb begin
         robFree = ROB_ENTRY_NUM - integer'(robCount_i);
-        issueFree = ISSUE_QUEUE_ENTRY_NUM + LSQ_ENTRY_NUM - integer'(issueCount_i);
+        issueFree = UNIFIED_IQ_ENTRY_NUM - integer'(issueCount_i);
         lsqFree = LSQ_ENTRY_NUM - integer'(lsqCount_i);
         physFree = integer'(freePhysCount_i);
         accept_o = '0;

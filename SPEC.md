@@ -47,7 +47,7 @@ F0 PC Pair + Parallel I-cache / BPU Request
 F1 Synchronous I-cache / Prediction Response
       |        (an I-cache miss blocks for refill)
       v
-Two-entry IF/ID Fetch Window
+Eight-entry Fetch Queue
       |
       v
 Decode -> Rename + Dispatch -> ROB / Unified IQ / LSQ
@@ -76,11 +76,11 @@ interstage registers, restores program order at retirement.
 | --- | ---: | --- | --- |
 | 1. F0 fetch request | 2 instruction addresses | `DualIfStages.sv`, `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageFoldedHistory.sv`, `TageHash.sv` | An accepted `PC`/`PC+4` pair launches the two-address synchronous I-cache tag/data lookup and the PC-indexed BPU lookup in parallel. No instruction word is read combinationally in F0. Post-accept or recovered GHR/Path History and precomputed folds generate the synchronous TAGE/SC table addresses. |
 | 2. F1 cache/prediction response and next PC | 2 instructions | `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageTable.sv`, `StatisticalCorrector.sv`, BTB/GShare/RAS | I-cache hit data is aligned with the retained BPU request context and registered TAGE/SC response. Provider/alternate selection produces the raw TAGE direction, SC may correct it, and target selection chooses the following request PC. A taken slot-0 response suppresses slot 1. An I-cache miss blocks this request, refills each missing 16-byte line with four backing-memory words, and internally retries the lookup before F1 becomes valid. |
-| 3. Fetch window | 2 instructions | `DualIF_IDRegister.sv` | The physical IF/ID register holds the oldest two fetched instructions. It can replace both slots, slide slot 1 into slot 0 after single dispatch, stall, or flush. |
+| 3. Fetch queue | 8 instructions, 2-wide enqueue/dequeue | `FetchQueue.sv` | Decouples synchronous F1 responses from decode/rename. It accepts a predicted bundle atomically, supplies the oldest two instructions, preserves a lone younger instruction after single dispatch, and flushes all speculative contents on redirect. |
 | 4. Decode | 2 instructions | `IdStages.sv`, `Decoder.sv` | Decodes RV32 control, architectural source/destination registers, immediates, memory width, branch type, CSR operation, and decode exceptions. This logic is combinational. |
 | 5. Rename and dispatch | 2 uops | `BackendDispatchStage.sv`, `RenameStage.sv` | Checks ROB/IQ/LSQ/free-PRF capacity atomically, translates architectural registers through the speculative RAT, allocates physical destinations, and inserts accepted uops into the ROB and IQ; memory uops also enter the LSQ. |
 | 6. Schedule, issue, and operand read | 2 uops | `BackendIssueStage.sv`, `IssueQueue.sv`, `PhysicalRegisterFile.sv` | Uops wait in the unified IQ until their sources are ready. Age-based selection forms memory/CSR, integer/branch, and second-integer fallback candidates. The backend accepts at most two, and the PRF supplies all candidate operands. |
-| 7. Execute / memory access | Up to 2 accepted uops | `BackendExecuteStage.sv`, `OoOExecutionUnit.sv`, `LoadStoreExecutionUnit.sv`, `DataCache.sv` | One shared LSU and two integer paths are available. A ready memory uop pairs with one integer/branch uop; an LSQ/cache-blocked memory candidate stays in the IQ while two ordinary integer-capable paths are used. Branches remain on the fixed main candidate path so LSU Ready cannot alter same-cycle recovery selection. Loads check LSQ forwarding/order and committed Store Buffer overlap before sending a ROB-tagged D-cache request. Multiple Loads may remain pending and complete by response tag. Stores only record address/data at execute. |
+| 7. Execute / memory access | Up to 2 accepted uops | `BackendExecuteStage.sv`, `OoOExecutionUnit.sv`, `LoadStoreExecutionUnit.sv`, `DataCache.sv` | One shared LSU and two integer paths are available. A ready memory uop pairs with one integer/branch uop; an LSQ/cache-blocked memory candidate stays in the IQ while two ordinary integer-capable paths are used. Loads check LSQ forwarding/order before issuing a tagged D-cache request. A Store may calculate its address as soon as the base source is ready; its data either arrives with that issue or is captured later by LSQ writeback snooping. |
 | 8. Completion, writeback, and wakeup | 2 results | Execution-unit result registers, PRF, ROB, IQ, LSQ | Registered results write the PRF, wake dependent IQ entries, and mark their ROB entries complete. Memory address/data state is written into the LSQ. Wrong-path completions are filtered during recovery; a killed completion is consumed during the active filter window even if an LSU result has lane-0 priority. |
 | 9. Commit and retirement | 2 uops | `BackendCommitStage.sv`, `ReorderBuffer.sv`, `RenameStage.sv`, `StoreBuffer.sv` | Retires only a contiguous completed ROB prefix, updates the committed RAT, frees old physical registers, takes precise traps, transfers cacheable Stores into an eight-entry committed Store Buffer, preserves MMIO ordering, and enqueues retired branch training. |
 
@@ -91,7 +91,7 @@ F0 PC pair enters the I-cache and BPU together; I-cache tag/data and TAGE/SC
 tables are read synchronously. The BPU retains the corresponding PC/history
 context across an I-cache miss, so its prediction metadata is not paired with a
 later request by mistake. Instruction words first become available with the F1
-I-cache response. The front end then has an explicit `DualIF_IDRegister`, but
+I-cache response. The front end then has an explicit eight-entry `FetchQueue`, but
 there is no separate
 legacy ID/EX register between decode and rename. Decode, capacity checking, and
 rename/dispatch form the combinational path that ends when accepted entries are
@@ -115,8 +115,8 @@ modify architectural memory.
 
 Prediction spans the fetch-request and registered-response stages, while branch
 direction and target resolve in the execute stage. A misprediction redirects
-the fetch PC, flushes the IF/ID
-window, removes younger ROB/IQ/LSQ entries, restores RAT and free-list state,
+the fetch PC, flushes the Fetch Queue, removes younger ROB/IQ/LSQ entries,
+restores RAT and free-list state,
 and recovers the 10-bit GShare history, 64-bit TAGE direction history, and
 16-bit TAGE Path History from the resolving branch's ROB-tagged checkpoints.
 The resolving branch remains in the ROB and later retires normally. Tagged
@@ -133,8 +133,8 @@ when its entry reaches the ROB head, providing precise exceptions.
 | --- | ---: | ---: | --- |
 | `ROB_ENTRY_NUM` | 16 | 4-bit ROB tag | Maximum number of in-flight instructions. Each entry records ordering, exception, destination-renaming, memory, and branch-training metadata. |
 | `PHYS_REG_NUM` | 48 | 6-bit physical-register index | The PRF contains 32 initial architectural mappings plus 16 extra registers for speculative destinations. |
-| `ISSUE_QUEUE_ENTRY_NUM` | 8 | See note below | Base integer scheduling capacity used when sizing the unified queue. |
-| `LSQ_ENTRY_NUM` | 8 | 3-bit LSQ tag | Maximum number of in-flight Loads and Stores tracked in memory order. |
+| `UNIFIED_IQ_ENTRY_NUM` | 16 | 5-bit occupancy count | Total capacity of the single unified scheduler; independent of LSQ capacity. |
+| `LSQ_ENTRY_NUM` | 16 | 4-bit LSQ tag | Maximum number of in-flight Loads and Stores tracked in memory order. |
 | `STORE_BUFFER_ENTRY_NUM` | 8 | 4-bit occupancy count | Maximum number of architecturally committed cacheable Stores waiting to drain. |
 
 ### ROB (`ROB_ENTRY_NUM`)
@@ -166,15 +166,17 @@ indication of ten-wide execution.
 
 ### Unified Issue Queue
 
-`BackendIssueStage` instantiates the unified queue with this expression:
+`BackendIssueStage` instantiates the unified queue directly from its own
+parameter:
 
 ```text
-IQ depth = ISSUE_QUEUE_ENTRY_NUM + LSQ_ENTRY_NUM = 8 + 8 = 16 entries
+IQ depth = UNIFIED_IQ_ENTRY_NUM = 16 entries
 ```
 
-Therefore, the current physical Issue Queue contains 16 entries, even though
-`ISSUE_QUEUE_ENTRY_NUM` itself is 8. Memory uops occupy both the unified IQ and
-the separate LSQ until they issue. The IQ can accept, wake, select, and issue up
+Memory uops occupy both the unified IQ and the separate LSQ until their address
+operation issues, but those structures are no longer sized by one another.
+Increasing the LSQ does not add scheduler entries, and increasing the IQ does
+not create memory-order entries. The IQ can accept, wake, select, and issue up
 to two uops per cycle. It exposes a third candidate only for ready-aware
 fallback: when the selected memory uop is blocked, two integer uops may consume
 the two accepted-issue slots. Selection remains age-based, and a uop leaves the
@@ -184,8 +186,15 @@ a request from launching while a stale copy remains in the IQ.
 
 ### Load/Store Queue (`LSQ_ENTRY_NUM`)
 
-The eight-entry LSQ preserves memory ordering and retains Load/Store address and
-Store-data state. Loads may bypass older Stores with known non-overlapping
+The 16-entry LSQ preserves memory ordering and retains Load/Store address and
+Store-data state. Each Store records separate `addressReady` and `dataReady`
+bits plus the physical-register tag of its data source. A Store leaves the IQ
+once its address source is ready. If its data is already ready, the LSU writes
+address and data together; otherwise the LSQ later captures the data by
+snooping the two PRF writeback buses. ROB retirement still requires both bits,
+so early address generation cannot expose an incomplete Store.
+
+Loads may bypass older Stores with known non-overlapping
 addresses and may forward from the youngest covering older Store. A Load waits
 if an older Store has an unknown address, unavailable data, or only a partial
 overlap. Stores become externally visible only when their ROB entries retire.
@@ -519,8 +528,9 @@ field.
   the maximum number of simultaneously live speculative destination mappings.
 - Increasing `ROB_ENTRY_NUM` also enlarges branch-recovery checkpoint arrays and
   the younger-entry recovery masks used by the IQ and LSQ.
-- The actual unified IQ capacity is the sum of `ISSUE_QUEUE_ENTRY_NUM` and
-  `LSQ_ENTRY_NUM`; change both with that relationship in mind.
+- `UNIFIED_IQ_ENTRY_NUM` and `LSQ_ENTRY_NUM` are independent. A memory uop
+  consumes one slot in each structure, so dispatch checks both free counts, but
+  changing either parameter no longer silently changes the other structure.
 - `BPU_HISTORY_WIDTH=N` creates `2^N` GShare counters. Increasing it changes
   both the GShare PHT size and the GShare checkpoint width.
 - `TAGE_HISTORY_WIDTH` is independent of `BPU_HISTORY_WIDTH`; increasing it

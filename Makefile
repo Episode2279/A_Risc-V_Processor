@@ -50,7 +50,7 @@ ifneq ($(filter 1 true yes on,$(TRACE)),)
 TRACE_ARG := +trace
 endif
 
-.PHONY: all help sim coremark lint bpu-smoke tage-smoke tage-update-smoke \
+.PHONY: all help sim coremark lint fetch-queue-smoke bpu-smoke tage-smoke tage-update-smoke \
 	sc-smoke icache-smoke dcache-smoke cache-smoke store-buffer-smoke \
 	lsu-pending-smoke ooo-smoke ooo-backend-smoke rv32i-compliance-smoke \
 	act4-build act4-run build run kanata kanata-legacy konata csr-smoke \
@@ -64,6 +64,7 @@ help:
 	@printf "  make sim              Rebuild CoreMark images, lint, build, and run Verilator\n"
 	@printf "  make coremark         Rebuild CoreMark and build/images/*.mem\n"
 	@printf "  make lint             Verilator lint for RTL plus integration testbench\n"
+	@printf "  make fetch-queue-smoke Test buffered dual-fetch enqueue/dequeue/flush\n"
 	@printf "  make bpu-smoke        Run GShare-base direction and BTB tests\n"
 	@printf "  make tage-smoke       Run tagged-table/TAGE predictor tests\n"
 	@printf "  make tage-update-smoke Run TAGE update-queue FIFO tests\n"
@@ -113,6 +114,16 @@ lint:
 	cd "$(PROJECT_DIR)" && \
 	$(VERILATOR) --lint-only $(VERILATOR_FLAGS) -f "$(CORE_FILELIST)" \
 		"$(VERIFICATION_DIR)/integration/core/topCPU_tb.sv" --top-module $(TB_TOP)
+
+fetch-queue-smoke:
+	mkdir -p "$(VERILATOR_DIR)/fetch-queue"
+	cd "$(PROJECT_DIR)" && \
+	$(VERILATOR) --binary $(VERILATOR_FLAGS) \
+		rtl/common/TypesPkg.sv rtl/common/interfaces/InstructionPacketIf.sv \
+		rtl/frontend/fetch/FetchQueue.sv \
+		"$(VERIFICATION_DIR)/unit/frontend/fetch_queue_tb.sv" \
+		--top-module fetch_queue_tb --Mdir "$(VERILATOR_DIR)/fetch-queue"
+	"$(VERILATOR_DIR)/fetch-queue/Vfetch_queue_tb"
 
 bpu-smoke:
 	mkdir -p "$(VERILATOR_DIR)/bpu"

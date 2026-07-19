@@ -24,8 +24,11 @@ package TypesPkg;
     // brought up incrementally.
     parameter int PHYS_REG_NUM = 48;
     parameter int ROB_ENTRY_NUM = 16;
-    parameter int ISSUE_QUEUE_ENTRY_NUM = 8;
-    parameter int LSQ_ENTRY_NUM = 8;
+    // The unified scheduler and LSQ are independent storage structures.  A
+    // memory uop occupies one entry in each, but changing one capacity must not
+    // silently resize the other.
+    parameter int UNIFIED_IQ_ENTRY_NUM = 16;
+    parameter int LSQ_ENTRY_NUM = 16;
     parameter int STORE_BUFFER_ENTRY_NUM = 8;
     // A 1K-entry PHT materially reduces destructive aliasing in CoreMark while
     // remaining small compared with the ROB/PRF state in this educational core.
@@ -100,6 +103,19 @@ package TypesPkg;
         logic           providerWeak;
         logic           scLowConfidence;
     } tage_meta_t;
+
+    // Stored representation used by the decoupled front-end fetch queue.
+    typedef struct packed {
+        instruction_t      insn;
+        instruction_addr_t pc;
+        logic              predictedTaken;
+        instruction_addr_t predictedTarget;
+        bpu_index_t        predictorIndex;
+        logic [BPU_HISTORY_WIDTH-1:0] historySnapshot;
+        tage_meta_t        tageMeta;
+        logic              predictedBtbHit;
+        logic              predictedRasUsed;
+    } fetch_packet_t;
 
     // A retired TAGE training event.  Direction-table writes may be delayed by
     // the banked update path, while committed-history state advances when this
@@ -293,6 +309,7 @@ package TypesPkg;
         logic              addressReady;
         word_t             address;
         logic              dataReady;
+        phys_reg_addr_t    storeDataPhys;
         word_t             storeData;
     } lsq_entry_t;
 
