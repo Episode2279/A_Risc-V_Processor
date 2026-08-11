@@ -86,6 +86,8 @@ module ooo_backend_tb;
         .branchCheckpointTag_o(), .branchCheckpointHistory_o(),
         .branchCheckpointTageHistory_o(),
         .branchCheckpointTagePathHistory_o(),
+        .branchCheckpointLoopMeta_o(),
+        .branchCheckpointScImli_o(),
         .branchTrain_o(branchTrain),
         .trapValid_o(trapValid), .trapPc_o(trapPc),
         .trapCause_o(trapCause), .trapValue_o(trapValue),

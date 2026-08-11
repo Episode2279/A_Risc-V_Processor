@@ -1,8 +1,6 @@
-rtl/frontend/decode/Decoder.sv
-rtl/frontend/bpu/BranchTargetBuffer.sv
+rtl/common/TypesPkg.sv
 rtl/frontend/bpu/BimodalPredictor.sv
 rtl/frontend/bpu/LoopPredictor.sv
-rtl/frontend/bpu/ReturnAddressStack.sv
 rtl/frontend/bpu/TageFoldedHistory.sv
 rtl/frontend/bpu/TageHash.sv
 rtl/frontend/bpu/TageUpdateQueue.sv
@@ -10,7 +8,4 @@ rtl/frontend/bpu/TageTable.sv
 rtl/frontend/bpu/ScSignedCounterTable.sv
 rtl/frontend/bpu/StatisticalCorrector.sv
 rtl/frontend/bpu/TagePredictor.sv
-rtl/frontend/bpu/BranchPredictionUnit.sv
-rtl/frontend/fetch/FetchQueue.sv
-rtl/frontend/fetch/DualIfStages.sv
-rtl/frontend/decode/IdStages.sv
+verification/perf/cbp/CbpRtlPredictor.sv

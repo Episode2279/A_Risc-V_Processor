@@ -24,6 +24,7 @@ module topCPU
     parameter logic [DATA_W-1:0] MMIO_BASE_ADDR = UART_TX_MMIO_ADDR,
     parameter logic [DATA_W-1:0] MMIO_LAST_ADDR = TOHOST_MMIO_ADDR + 32'd7,
     parameter bit BPU_TAGE_ENABLE = 1'b1,
+    parameter bit BPU_LOOP_ENABLE = 1'b1,
     parameter bit BPU_SC_ENABLE = 1'b1,
     parameter int BPU_SC_LOW_CONFIDENCE_THRESHOLD = 23,
     parameter int BPU_SC_WEAK_BASE_WEIGHT = 20,
@@ -157,6 +158,11 @@ module topCPU
     output logic [63:0] dbg_perfDcacheRefillLines,dbg_perfDcacheRefillCycles,
     output logic [63:0] dbg_perfDcacheMmioRequests,dbg_perfDcacheRequestBackpressureCycles,
     output logic dbg_scOverrideEvent,dbg_scCorrectEvent,dbg_scHarmEvent,
+    output logic [SC_FEATURE_FAMILY_NUM-1:0]
+        dbg_scFamilyCorrectSupport,dbg_scFamilyHarmSupport,
+    output logic dbg_loopHitEvent,dbg_loopConfidentEvent,
+    output logic dbg_loopOverrideEvent,dbg_loopCorrectEvent,
+    output logic dbg_loopHarmEvent,dbg_loopTripMismatchEvent,
     output logic dbg_branchTrainValid,dbg_branchTrainTaken,
     output logic dbg_branchTrainTagePrediction,dbg_branchTrainFinalPrediction,
     output logic dbg_branchTrainStrong,dbg_branchTrainScLowConfidence,
@@ -279,6 +285,8 @@ module topCPU
     logic [BPU_HISTORY_WIDTH-1:0] branchCheckpointHistory [2];
     tage_history_t branchCheckpointTageHistory [2];
     tage_path_history_t branchCheckpointTagePathHistory [2];
+    sc_imli_t branchCheckpointScImli [2];
+    loop_meta_t branchCheckpointLoopMeta [2];
     bpu_train_t branchTrain;
     logic bpuUpdateReady;
     logic trapValid;
@@ -340,6 +348,7 @@ module topCPU
 
     BranchPredictionUnit #(
         .TAGE_ENABLE(BPU_TAGE_ENABLE),
+        .LOOP_ENABLE(BPU_LOOP_ENABLE),
         .SC_ENABLE(BPU_SC_ENABLE),
         .SC_LOW_CONFIDENCE_THRESHOLD(
             BPU_SC_LOW_CONFIDENCE_THRESHOLD),
@@ -382,6 +391,7 @@ module topCPU
         .updateReady_o(bpuUpdateReady),
         .resolveValid_i(branchResolved), .resolvePc_i(branchPc),
         .resolveIsConditional_i(branchIsConditional), .resolveTaken_i(branchTaken),
+        .resolveTarget_i(branchTarget),
         .resolveMispredicted_i(branchMispredicted),
         .resolveIsCall_i(branchIsCall), .resolveIsReturn_i(branchIsReturn),
         .resolveRobTag_i(branchRobTag), .checkpointAllocValid_i(branchCheckpointValid),
@@ -389,7 +399,9 @@ module topCPU
         .checkpointAllocHistory_i(branchCheckpointHistory),
         .checkpointAllocTageHistory_i(branchCheckpointTageHistory),
         .checkpointAllocTagePathHistory_i(
-            branchCheckpointTagePathHistory)
+            branchCheckpointTagePathHistory),
+        .checkpointAllocScImli_i(branchCheckpointScImli),
+        .checkpointAllocLoopMeta_i(branchCheckpointLoopMeta)
     );
 
     DualIfStages #(
@@ -507,6 +519,8 @@ module topCPU
         .branchCheckpointTageHistory_o(branchCheckpointTageHistory),
         .branchCheckpointTagePathHistory_o(
             branchCheckpointTagePathHistory),
+        .branchCheckpointScImli_o(branchCheckpointScImli),
+        .branchCheckpointLoopMeta_o(branchCheckpointLoopMeta),
         .branchTrain_o(branchTrain),
         .branchTrainReady_i(bpuUpdateReady),
         .trapValid_o(trapValid),
@@ -805,16 +819,54 @@ module topCPU
         perfDcacheRequestBackpressureCycles;
     assign dbg_scOverrideEvent = branchTrain.valid &&
         branchTrain.isConditional &&
-        (branchTrain.tageMeta.tagePrediction !=
+        (branchTrain.tageMeta.preScPrediction !=
          branchTrain.tageMeta.finalPrediction);
     assign dbg_scCorrectEvent = branchTrain.valid &&
         branchTrain.isConditional &&
-        (branchTrain.tageMeta.tagePrediction != branchTrain.taken) &&
+        (branchTrain.tageMeta.preScPrediction != branchTrain.taken) &&
         (branchTrain.tageMeta.finalPrediction == branchTrain.taken);
     assign dbg_scHarmEvent = branchTrain.valid &&
         branchTrain.isConditional &&
-        (branchTrain.tageMeta.tagePrediction == branchTrain.taken) &&
+        (branchTrain.tageMeta.preScPrediction == branchTrain.taken) &&
         (branchTrain.tageMeta.finalPrediction != branchTrain.taken);
+    always_comb begin : scFamilyAttribution
+        integer familyIndex;
+        dbg_scFamilyCorrectSupport = '0;
+        dbg_scFamilyHarmSupport = '0;
+        for (familyIndex = 0;
+             familyIndex < SC_FEATURE_FAMILY_NUM;
+             familyIndex = familyIndex + 1) begin
+            if (dbg_scOverrideEvent &&
+                branchTrain.tageMeta.scFamilyValid[familyIndex] &&
+                (branchTrain.tageMeta.scFamilyTaken[familyIndex] ==
+                 branchTrain.tageMeta.finalPrediction)) begin
+                dbg_scFamilyCorrectSupport[familyIndex] =
+                    dbg_scCorrectEvent;
+                dbg_scFamilyHarmSupport[familyIndex] =
+                    dbg_scHarmEvent;
+            end
+        end
+    end
+    assign dbg_loopHitEvent = branchTrain.valid &&
+        branchTrain.isConditional && branchTrain.tageMeta.loop.hit;
+    assign dbg_loopConfidentEvent = branchTrain.valid &&
+        branchTrain.isConditional && branchTrain.tageMeta.loop.confident;
+    assign dbg_loopOverrideEvent = branchTrain.valid &&
+        branchTrain.isConditional && branchTrain.tageMeta.loop.used &&
+        (branchTrain.tageMeta.loop.prediction !=
+         branchTrain.tageMeta.tagePrediction);
+    assign dbg_loopCorrectEvent = dbg_loopOverrideEvent &&
+        (branchTrain.tageMeta.loop.prediction == branchTrain.taken) &&
+        (branchTrain.tageMeta.tagePrediction != branchTrain.taken);
+    assign dbg_loopHarmEvent = dbg_loopOverrideEvent &&
+        (branchTrain.tageMeta.loop.prediction != branchTrain.taken) &&
+        (branchTrain.tageMeta.tagePrediction == branchTrain.taken);
+    assign dbg_loopTripMismatchEvent = branchTrain.valid &&
+        branchTrain.isConditional && branchTrain.tageMeta.loop.hit &&
+        (branchTrain.taken != branchTrain.tageMeta.loop.direction) &&
+        (branchTrain.tageMeta.loop.tripCount != '0) &&
+        (branchTrain.tageMeta.loop.tripCount !=
+         branchTrain.tageMeta.loop.iterationBefore);
     assign dbg_branchTrainValid = branchTrain.valid &&
         branchTrain.isConditional;
     assign dbg_branchTrainTaken = branchTrain.taken;
@@ -827,7 +879,8 @@ module topCPU
     assign dbg_branchTrainScLowConfidence =
         branchTrain.tageMeta.scLowConfidence;
     assign dbg_branchTrainPc = branchTrain.pc;
-    assign dbg_branchTrainHistory = branchTrain.tageMeta.history;
+    assign dbg_branchTrainHistory =
+        branchTrain.tageMeta.history[63:0];
     assign dbg_branchTrainPathHistory = branchTrain.tageMeta.pathHistory;
 
     // Event-oriented trace view used by sim_main.cpp and topCPU_tb.sv.  The

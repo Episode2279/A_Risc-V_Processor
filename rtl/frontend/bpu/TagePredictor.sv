@@ -3,6 +3,7 @@ module TagePredictor
 #(
     parameter int TABLE_ENTRIES = TAGE_TABLE_ENTRIES,
     parameter int INDEX_WIDTH = $clog2(TABLE_ENTRIES),
+    parameter bit LOOP_ENABLE = 1'b1,
     parameter bit SC_ENABLE = 1'b1,
     parameter int SC_LOW_CONFIDENCE_THRESHOLD = 23,
     parameter int SC_WEAK_BASE_WEIGHT = 20,
@@ -21,8 +22,10 @@ module TagePredictor
 
     input  instruction_addr_t queryPc1_i,
     input  logic fallbackPrediction1_i,
+    input  logic response0Conditional_i,
     input  logic query0Conditional_i,
     input  logic query0Control_i,
+    input  logic query0Backward_i,
     input  logic query0PathTaken_i,
     output tage_meta_t queryMeta1_o,
 
@@ -30,14 +33,17 @@ module TagePredictor
     // separate accepted-control event so JAL/JALR also contribute.
     input  logic speculateValid_i,
     input  logic speculateTaken_i,
+    input  logic speculateBackward_i,
     input  logic speculateValid1_i,
     input  logic speculateTaken1_i,
+    input  logic speculateBackward1_i,
     input  logic speculateControlValid_i,
     input  logic speculateControlValid1_i,
 
     input  logic updateValid_i,
     input  logic updateIsConditional_i,
     input  instruction_addr_t updatePc_i,
+    input  instruction_addr_t updateTarget_i,
     input  logic updateTaken_i,
     input  tage_meta_t updateMeta_i,
     output logic updateReady_o,
@@ -46,11 +52,14 @@ module TagePredictor
     input  instruction_addr_t recoverPc_i,
     input  logic recoverIsConditional_i,
     input  logic recoverTaken_i,
+    input  instruction_addr_t recoverTarget_i,
     input  rob_tag_t recoverRobTag_i,
     input  logic [1:0] checkpointAllocValid_i,
     input  rob_tag_t checkpointAllocTag_i [2],
     input  tage_history_t checkpointAllocHistory_i [2],
-    input  tage_path_history_t checkpointAllocPathHistory_i [2]
+    input  tage_path_history_t checkpointAllocPathHistory_i [2],
+    input  sc_imli_t checkpointAllocScImli_i [2],
+    input  loop_meta_t checkpointAllocLoopMeta_i [2]
 );
 
     tage_history_t globalHistory;
@@ -74,6 +83,16 @@ module TagePredictor
     tage_path_history_t predictionPathHistory1;
     tage_path_history_t restorePathHistory;
     tage_path_history_t robPathHistoryCheckpoint [ROB_ENTRY_NUM];
+    sc_imli_t globalImli;
+    sc_imli_t committedImli;
+    sc_imli_t committedImliNext;
+    sc_imli_t speculativeImliNext;
+    sc_imli_t requestImli;
+    sc_imli_t queryImli1;
+    sc_imli_t predictionImli;
+    sc_imli_t predictionImli1;
+    sc_imli_t restoreImli;
+    sc_imli_t robImliCheckpoint [ROB_ENTRY_NUM];
     logic restoreHistoryValid;
     instruction_addr_t predictionPc;
     instruction_addr_t predictionPc1;
@@ -91,8 +110,9 @@ module TagePredictor
     logic tableUpdateMatch [TAGE_TABLE_NUM];
     logic tableReplaceable [TAGE_TABLE_NUM];
     logic [1:0] tableUpdateUseful [TAGE_TABLE_NUM];
-    localparam int SC_GEHL_TABLE_NUM = 4;
-    localparam int SC_FOLD_WIDTH = 7;
+    localparam int SC_GEHL_TABLE_NUM = SC_GLOBAL_GEHL_TABLE_NUM;
+    localparam int SC_FOLD_WIDTH =
+        $clog2(SC_GLOBAL_GEHL_TABLE_ENTRIES);
     logic [INDEX_WIDTH-1:0] tageIndexFold [TAGE_TABLE_NUM];
     logic [INDEX_WIDTH-1:0] tageIndexFold1 [TAGE_TABLE_NUM];
     logic [SC_FOLD_WIDTH-1:0] scQueryFold [SC_GEHL_TABLE_NUM];
@@ -115,6 +135,10 @@ module TagePredictor
     logic [1:0] selectedUseful;
     logic [2:0] selectedCounter1;
     logic [1:0] selectedUseful1;
+    loop_meta_t loopMeta;
+    loop_meta_t loopMeta1;
+    logic loopSelectedPrediction;
+    logic loopSelectedPrediction1;
     tage_meta_t tageBaseMeta;
     tage_meta_t tageBaseMeta1;
     logic scResponseValid;
@@ -122,11 +146,18 @@ module TagePredictor
     logic scPrediction1;
     logic scLowConfidence;
     logic scLowConfidence1;
-    // Short (T0/T1), medium (T2/T3), and long (T4) providers each have
-    // independent PC classes so unrelated new entries do not train one global
-    // alternate-on-new decision.
-    logic [3:0] useAlternateOnNew [6];
-    logic [1:0] allocationPressure [3];
+    sc_score_t scScore;
+    sc_score_t scScore1;
+    logic [SC_FEATURE_FAMILY_NUM-1:0] scFamilyTaken;
+    logic [SC_FEATURE_FAMILY_NUM-1:0] scFamilyTaken1;
+    logic [SC_FEATURE_FAMILY_NUM-1:0] scFamilyValid;
+    logic [SC_FEATURE_FAMILY_NUM-1:0] scFamilyValid1;
+    sc_local_history_t scLocalHistory;
+    sc_local_history_t scLocalHistory1;
+    // Four history groups, each split into two PC classes, keep UAN and
+    // replacement pressure local to comparable Provider lengths.
+    logic [3:0] useAlternateOnNew [8];
+    logic [1:0] allocationPressure [4];
     logic [7:0] allocationLfsr;
     logic [1:0] updateHistoryGroup;
     logic [1:0] minimumProtectedUseful;
@@ -158,16 +189,18 @@ module TagePredictor
     integer checkpointIndex;
     integer alternateGroupIndex;
 
-    localparam logic [7:0] ALLOCATION_LFSR_RESET = 8'ha5;
+    // A nonzero seed whose first two rotating probes cover T0/T1.  This
+    // avoids cold-start starvation of the short-history tables now that all
+    // three LFSR index bits are meaningful with eight tagged tables.
+    localparam logic [7:0] ALLOCATION_LFSR_RESET = 8'h20;
     localparam logic [1:0] ALLOCATION_PRESSURE_THRESHOLD = 2'b11;
-    localparam logic [2:0] TAGE_TABLE_COUNT = 3'(TAGE_TABLE_NUM);
-
     initial begin
         if ((SC_GEHL_TABLE_NUM * SC_FOLD_WIDTH) !=
             BPU_SC_FOLD_STORAGE_BITS)
             $fatal(1, "SC folded-history state disagrees with BPU budget");
-        if (BPU_TOTAL_STORAGE_BITS > BPU_CBP_STORAGE_LIMIT_BITS)
-            $fatal(1, "BPU logical state exceeds the CBP 4 KiB budget");
+        if (BPU_ENFORCE_CBP_STORAGE_LIMIT &&
+            (BPU_TOTAL_STORAGE_BITS > BPU_CBP_STORAGE_LIMIT_BITS))
+            $fatal(1, "BPU logical state exceeds the CBP 16 KiB budget");
     end
 
     function automatic logic [1:0] providerHistoryGroup(
@@ -178,8 +211,10 @@ module TagePredictor
                 providerHistoryGroup = 2'd0;
             else if (provider <= tage_provider_t'(3))
                 providerHistoryGroup = 2'd1;
-            else
+            else if (provider <= tage_provider_t'(5))
                 providerHistoryGroup = 2'd2;
+            else
+                providerHistoryGroup = 2'd3;
         end
     endfunction
 
@@ -201,11 +236,11 @@ module TagePredictor
         input logic [2:0] rawStart
     );
         begin
-            // Avoid a divider in the retirement path. Values 5..7 wrap to
-            // 0..2; the small bias is acceptable for this five-table policy,
-            // and the LFSR changes the rotating start on every attempt.
-            if (rawStart >= TAGE_TABLE_COUNT)
-                normalizeAllocationStart = rawStart - TAGE_TABLE_COUNT;
+            if (TAGE_TABLE_NUM == 8)
+                normalizeAllocationStart = rawStart;
+            else if (integer'(rawStart) >= TAGE_TABLE_NUM)
+                normalizeAllocationStart =
+                    rawStart - 3'(TAGE_TABLE_NUM);
             else
                 normalizeAllocationStart = rawStart;
         end
@@ -248,6 +283,23 @@ module TagePredictor
                       branchPc[13] ^ pathTaken;
             advancePathHistory = {
                 history[TAGE_PATH_HISTORY_WIDTH-2:0], pathBit};
+        end
+    endfunction
+
+    function automatic sc_imli_t advanceImli(
+        input sc_imli_t current,
+        input logic backward,
+        input logic taken
+    );
+        begin
+            if (!backward)
+                advanceImli = current;
+            else if (!taken)
+                advanceImli = '0;
+            else if (current == {SC_IMLI_WIDTH{1'b1}})
+                advanceImli = current;
+            else
+                advanceImli = current + sc_imli_t'(1);
         end
     endfunction
 
@@ -311,6 +363,16 @@ module TagePredictor
                 speculativePathHistoryNext, predictionPc1,
                 speculateTaken1_i);
 
+        speculativeImliNext = globalImli;
+        if (speculateValid_i)
+            speculativeImliNext = advanceImli(
+                speculativeImliNext, speculateBackward_i,
+                speculateTaken_i);
+        if (speculateValid1_i)
+            speculativeImliNext = advanceImli(
+                speculativeImliNext, speculateBackward1_i,
+                speculateTaken1_i);
+
         committedHistoryNext = committedHistory;
         if (updateAccepted && updateIsConditional_i)
             committedHistoryNext = {
@@ -321,9 +383,16 @@ module TagePredictor
             committedPathHistoryNext = advancePathHistory(
                 committedPathHistory, updatePc_i, updateTaken_i);
 
+        committedImliNext = committedImli;
+        if (updateAccepted && updateIsConditional_i)
+            committedImliNext = advanceImli(
+                committedImli, updateTarget_i < updatePc_i,
+                updateTaken_i);
+
         restoreHistoryValid = flush_i || recoverValid_i;
         restoreHistory = committedHistoryNext;
         restorePathHistory = committedPathHistoryNext;
+        restoreImli = committedImliNext;
         if (!flush_i && recoverValid_i) begin
             restoreHistory = robHistoryCheckpoint[recoverRobTag_i];
             if (recoverIsConditional_i)
@@ -336,6 +405,12 @@ module TagePredictor
             restorePathHistory = advancePathHistory(
                 robPathHistoryCheckpoint[recoverRobTag_i],
                 recoverPc_i, recoverTaken_i);
+            restoreImli = robImliCheckpoint[recoverRobTag_i];
+            if (recoverIsConditional_i)
+                restoreImli = advanceImli(
+                    robImliCheckpoint[recoverRobTag_i],
+                    recoverTarget_i < recoverPc_i,
+                    recoverTaken_i);
         end
 
         // The synchronous table request launched at this edge must already use
@@ -345,6 +420,8 @@ module TagePredictor
             restoreHistory : speculativeHistoryNext;
         requestPathHistory = restoreHistoryValid ?
             restorePathHistory : speculativePathHistoryNext;
+        requestImli = restoreHistoryValid ?
+            restoreImli : speculativeImliNext;
 
         // Slot 1 is useful only on slot 0's fall-through path.  Hashing it with
         // a fixed NT outcome is therefore exact for every consumed slot-1
@@ -358,6 +435,11 @@ module TagePredictor
         if (query0Control_i)
             queryPathHistory1 = advancePathHistory(
                 requestPathHistory, queryPc_i, 1'b0);
+
+        queryImli1 = requestImli;
+        if (query0Conditional_i)
+            queryImli1 = advanceImli(
+                requestImli, query0Backward_i, 1'b0);
     end
 
     // Scan from the shortest to the longest table. Every later hit replaces
@@ -366,8 +448,10 @@ module TagePredictor
         tageBaseMeta = '0;
         tageBaseMeta.history = predictionHistory;
         tageBaseMeta.pathHistory = predictionPathHistory;
+        tageBaseMeta.scImli = predictionImli;
         tageBaseMeta.alternatePrediction = fallbackPrediction_i;
         tageBaseMeta.tagePrediction = fallbackPrediction_i;
+        tageBaseMeta.preScPrediction = fallbackPrediction_i;
         tageBaseMeta.finalPrediction = fallbackPrediction_i;
         selectedCounter = '0;
         selectedUseful = '0;
@@ -399,6 +483,7 @@ module TagePredictor
                 tageBaseMeta.alternatePrediction :
                 tageBaseMeta.providerPrediction;
         end
+        tageBaseMeta.preScPrediction = tageBaseMeta.tagePrediction;
         tageBaseMeta.finalPrediction = tageBaseMeta.tagePrediction;
     end
 
@@ -406,8 +491,10 @@ module TagePredictor
         tageBaseMeta1 = '0;
         tageBaseMeta1.history = predictionHistory1;
         tageBaseMeta1.pathHistory = predictionPathHistory1;
+        tageBaseMeta1.scImli = predictionImli1;
         tageBaseMeta1.alternatePrediction = fallbackPrediction1_i;
         tageBaseMeta1.tagePrediction = fallbackPrediction1_i;
+        tageBaseMeta1.preScPrediction = fallbackPrediction1_i;
         tageBaseMeta1.finalPrediction = fallbackPrediction1_i;
         selectedCounter1 = '0;
         selectedUseful1 = '0;
@@ -439,11 +526,20 @@ module TagePredictor
                 tageBaseMeta1.alternatePrediction :
                 tageBaseMeta1.providerPrediction;
         end
+        tageBaseMeta1.preScPrediction = tageBaseMeta1.tagePrediction;
         tageBaseMeta1.finalPrediction = tageBaseMeta1.tagePrediction;
     end
 
     always_comb begin
         queryMeta_o = tageBaseMeta;
+        queryMeta_o.loop = loopMeta;
+        queryMeta_o.loop.used = LOOP_ENABLE && loopMeta.confident;
+        queryMeta_o.preScPrediction = loopSelectedPrediction;
+        queryMeta_o.finalPrediction = loopSelectedPrediction;
+        queryMeta_o.scLocalHistory = scLocalHistory;
+        queryMeta_o.scScore = scScore;
+        queryMeta_o.scFamilyTaken = scFamilyTaken;
+        queryMeta_o.scFamilyValid = scFamilyValid;
         if (SC_ENABLE && scResponseValid) begin
             queryMeta_o.finalPrediction = scPrediction;
             queryMeta_o.scLowConfidence = scLowConfidence;
@@ -452,6 +548,14 @@ module TagePredictor
 
     always_comb begin
         queryMeta1_o = tageBaseMeta1;
+        queryMeta1_o.loop = loopMeta1;
+        queryMeta1_o.loop.used = LOOP_ENABLE && loopMeta1.confident;
+        queryMeta1_o.preScPrediction = loopSelectedPrediction1;
+        queryMeta1_o.finalPrediction = loopSelectedPrediction1;
+        queryMeta1_o.scLocalHistory = scLocalHistory1;
+        queryMeta1_o.scScore = scScore1;
+        queryMeta1_o.scFamilyTaken = scFamilyTaken1;
+        queryMeta1_o.scFamilyValid = scFamilyValid1;
         if (SC_ENABLE && scResponseValid) begin
             queryMeta1_o.finalPrediction = scPrediction1;
             queryMeta1_o.scLowConfidence = scLowConfidence1;
@@ -563,16 +667,20 @@ module TagePredictor
             committedHistory <= '0;
             globalPathHistory <= '0;
             committedPathHistory <= '0;
+            globalImli <= '0;
+            committedImli <= '0;
             predictionPc <= RESET_VECTOR;
             predictionPc1 <= RESET_VECTOR + 32'd4;
             predictionHistory <= '0;
             predictionHistory1 <= '0;
             predictionPathHistory <= '0;
             predictionPathHistory1 <= '0;
-            for (alternateGroupIndex = 0; alternateGroupIndex < 6;
+            predictionImli <= '0;
+            predictionImli1 <= '0;
+            for (alternateGroupIndex = 0; alternateGroupIndex < 8;
                  alternateGroupIndex = alternateGroupIndex + 1)
                 useAlternateOnNew[alternateGroupIndex] <= 4'b0111;
-            for (alternateGroupIndex = 0; alternateGroupIndex < 3;
+            for (alternateGroupIndex = 0; alternateGroupIndex < 4;
                  alternateGroupIndex = alternateGroupIndex + 1)
                 allocationPressure[alternateGroupIndex] <= '0;
             allocationLfsr <= ALLOCATION_LFSR_RESET;
@@ -582,10 +690,12 @@ module TagePredictor
                  checkpointIndex = checkpointIndex + 1) begin
                 robHistoryCheckpoint[checkpointIndex] <= '0;
                 robPathHistoryCheckpoint[checkpointIndex] <= '0;
+                robImliCheckpoint[checkpointIndex] <= '0;
             end
         end else begin
             committedHistory <= committedHistoryNext;
             committedPathHistory <= committedPathHistoryNext;
+            committedImli <= committedImliNext;
 
             // These snapshots describe the same request sampled by every
             // synchronous TageTable instance at this edge.
@@ -595,16 +705,21 @@ module TagePredictor
             predictionHistory1 <= queryHistory1;
             predictionPathHistory <= requestPathHistory;
             predictionPathHistory1 <= queryPathHistory1;
+            predictionImli <= requestImli;
+            predictionImli1 <= queryImli1;
 
             if (flush_i) begin
                 globalHistory <= committedHistoryNext;
                 globalPathHistory <= committedPathHistoryNext;
+                globalImli <= committedImliNext;
             end else if (recoverValid_i) begin
                 globalHistory <= restoreHistory;
                 globalPathHistory <= restorePathHistory;
+                globalImli <= restoreImli;
             end else begin
                 globalHistory <= speculativeHistoryNext;
                 globalPathHistory <= speculativePathHistoryNext;
+                globalImli <= speculativeImliNext;
             end
 
             if (trainingValid && trainingIsConditional) begin
@@ -672,23 +787,27 @@ module TagePredictor
                         robPathHistoryCheckpoint[
                             checkpointAllocTag_i[checkpointIndex]] <=
                             checkpointAllocPathHistory_i[checkpointIndex];
+                        robImliCheckpoint[
+                            checkpointAllocTag_i[checkpointIndex]] <=
+                            checkpointAllocScImli_i[checkpointIndex];
                     end
                 end
             end
         end
     end
 
-    // Dedicated SC folds use the empirically selected 3/7/15/31 histories.
-    // They are incrementally maintained just like the TAGE folds, adding only
-    // 4*7 bits of logical state and no extra prediction pipeline stage.
+    // Dedicated SC folds cover short through very long global correlations.
+    // They are incrementally maintained just like the TAGE folds.
     generate
         for (genvar generatedScFold = 0;
              generatedScFold < SC_GEHL_TABLE_NUM;
              generatedScFold = generatedScFold + 1) begin : generateScFolds
             localparam int SC_HISTORY_LENGTH =
-                (generatedScFold == 0) ? 3 :
-                (generatedScFold == 1) ? 7 :
-                (generatedScFold == 2) ? 15 : 31;
+                (generatedScFold == 0) ? 2 :
+                (generatedScFold == 1) ? 6 :
+                (generatedScFold == 2) ? 12 :
+                (generatedScFold == 3) ? 24 :
+                (generatedScFold == 4) ? 48 : 192;
 
             TageFoldedHistory #(
                 .HISTORY_LENGTH(SC_HISTORY_LENGTH),
@@ -709,12 +828,40 @@ module TagePredictor
         end
     endgenerate
 
+    assign loopSelectedPrediction =
+        (LOOP_ENABLE && loopMeta.confident) ?
+            loopMeta.prediction : tageBaseMeta.tagePrediction;
+    assign loopSelectedPrediction1 =
+        (LOOP_ENABLE && loopMeta1.confident) ?
+            loopMeta1.prediction : tageBaseMeta1.tagePrediction;
+
+    LoopPredictor loopPredictor (
+        .clk(clk), .rst(rst), .flush_i(flush_i),
+        .queryPc_i(queryPc_i), .queryPc1_i(queryPc1_i),
+        .response0Conditional_i(response0Conditional_i),
+        .queryMeta_o(loopMeta), .queryMeta1_o(loopMeta1),
+        .speculateValid_i(LOOP_ENABLE && speculateValid_i),
+        .speculateTaken_i(speculateTaken_i),
+        .speculateValid1_i(LOOP_ENABLE && speculateValid1_i),
+        .speculateTaken1_i(speculateTaken1_i),
+        .updateValid_i(LOOP_ENABLE && updateAccepted &&
+                       updateIsConditional_i),
+        .updatePc_i(updatePc_i), .updateTarget_i(updateTarget_i),
+        .updateTaken_i(updateTaken_i),
+        .updateMeta_i(updateMeta_i.loop),
+        .recoverValid_i(recoverValid_i),
+        .recoverIsConditional_i(recoverIsConditional_i),
+        .recoverTaken_i(recoverTaken_i),
+        .recoverRobTag_i(recoverRobTag_i),
+        .checkpointAllocValid_i(checkpointAllocValid_i),
+        .checkpointAllocTag_i(checkpointAllocTag_i),
+        .checkpointAllocMeta_i(checkpointAllocLoopMeta_i)
+    );
+
     // The SC reads in parallel with the tagged tables and receives their raw
     // TAGE/UAN decision in the response cycle.  Retirement uses the history
     // saved in tage_meta_t, so only nonsquashed conditional branches train it.
     StatisticalCorrector #(
-        .HISTORY_FOLD_NUM(SC_GEHL_TABLE_NUM),
-        .HISTORY_FOLD_WIDTH(SC_FOLD_WIDTH),
         .LOW_CONFIDENCE_THRESHOLD(SC_LOW_CONFIDENCE_THRESHOLD),
         .WEAK_BASE_WEIGHT(SC_WEAK_BASE_WEIGHT),
         .STRONG_BASE_WEIGHT(SC_STRONG_BASE_WEIGHT)
@@ -722,29 +869,46 @@ module TagePredictor
         .clk(clk), .rst(rst),
         .queryValid_i(SC_ENABLE),
         .queryPc_i(queryPc_i), .queryPc1_i(queryPc1_i),
-        .queryHistoryFold_i(scQueryFold),
-        .queryHistoryFold1_i(scQueryFold1),
+        .queryGlobalFold_i(scQueryFold),
+        .queryGlobalFold1_i(scQueryFold1),
         .queryPath_i(requestPathHistory),
         .queryPath1_i(queryPathHistory1),
-        .basePrediction_i(tageBaseMeta.tagePrediction),
-        .baseStrong_i(tageBaseMeta.providerValid &&
-                      !tageBaseMeta.providerWeak),
-        .basePrediction1_i(tageBaseMeta1.tagePrediction),
-        .baseStrong1_i(tageBaseMeta1.providerValid &&
-                       !tageBaseMeta1.providerWeak),
+        .queryImli_i(requestImli),
+        .queryImli1_i(queryImli1),
+        .basePrediction_i(loopSelectedPrediction),
+        .baseStrong_i((LOOP_ENABLE && loopMeta.confident) ||
+                      (tageBaseMeta.providerValid &&
+                       !tageBaseMeta.providerWeak)),
+        .basePrediction1_i(loopSelectedPrediction1),
+        .baseStrong1_i((LOOP_ENABLE && loopMeta1.confident) ||
+                       (tageBaseMeta1.providerValid &&
+                        !tageBaseMeta1.providerWeak)),
         .responseValid_o(scResponseValid),
         .predictTaken_o(scPrediction),
         .predictTaken1_o(scPrediction1),
         .lowConfidence_o(scLowConfidence),
         .lowConfidence1_o(scLowConfidence1),
-        .score_o(), .score1_o(),
+        .score_o(scScore), .score1_o(scScore1),
+        .familyTaken_o(scFamilyTaken),
+        .familyTaken1_o(scFamilyTaken1),
+        .familyValid_o(scFamilyValid),
+        .familyValid1_o(scFamilyValid1),
+        .localHistory_o(scLocalHistory),
+        .localHistory1_o(scLocalHistory1),
         .updateValid_i(SC_ENABLE && trainingValid &&
                        trainingIsConditional),
         .updatePc_i(trainingPc),
         .updateHistory_i(trainingMeta.history),
         .updatePath_i(trainingMeta.pathHistory),
+        .updateLocalHistory_i(trainingMeta.scLocalHistory),
+        .updateImli_i(trainingMeta.scImli),
         .updateTaken_i(trainingTaken),
+        .updateBasePrediction_i(trainingMeta.preScPrediction),
+        .updateBaseStrong_i(trainingMeta.loop.confident ||
+                            (trainingMeta.providerValid &&
+                             !trainingMeta.providerWeak)),
         .updateFinalPrediction_i(trainingMeta.finalPrediction),
+        .updateScore_i(trainingMeta.scScore),
         .updateLowConfidence_i(trainingMeta.scLowConfidence)
     );
 
@@ -756,12 +920,18 @@ module TagePredictor
                 (generatedTable == 0) ? 4 :
                 (generatedTable == 1) ? 8 :
                 (generatedTable == 2) ? 16 :
-                (generatedTable == 3) ? 32 : 64;
+                (generatedTable == 3) ? 32 :
+                (generatedTable == 4) ? 64 :
+                (generatedTable == 5) ? 96 :
+                (generatedTable == 6) ? 128 : 192;
             localparam int TABLE_TAG_WIDTH =
                 (generatedTable == 0) ? 7 :
                 (generatedTable == 1) ? 8 :
                 (generatedTable == 2) ? 9 :
-                (generatedTable == 3) ? 10 : 11;
+                (generatedTable == 3) ? 10 :
+                (generatedTable == 4) ? 11 :
+                (generatedTable == 5) ? 12 :
+                (generatedTable == 6) ? 13 : 14;
 
             logic [TABLE_TAG_WIDTH-1:0] queryTagFoldA;
             logic [TABLE_TAG_WIDTH-1:0] queryTagFoldA1;

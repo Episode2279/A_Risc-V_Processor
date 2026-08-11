@@ -49,6 +49,8 @@ module OoOBackend
     output logic [BPU_HISTORY_WIDTH-1:0] branchCheckpointHistory_o [2],
     output tage_history_t branchCheckpointTageHistory_o [2],
     output tage_path_history_t branchCheckpointTagePathHistory_o [2],
+    output sc_imli_t branchCheckpointScImli_o [2],
+    output loop_meta_t branchCheckpointLoopMeta_o [2],
     output bpu_train_t branchTrain_o,
     input  logic branchTrainReady_i,
 
@@ -278,6 +280,10 @@ module OoOBackend
             decode0_bus.tageMeta.pathHistory;
         branchCheckpointTagePathHistory_o[1] =
             decode1_bus.tageMeta.pathHistory;
+        branchCheckpointScImli_o[0] = decode0_bus.tageMeta.scImli;
+        branchCheckpointScImli_o[1] = decode1_bus.tageMeta.scImli;
+        branchCheckpointLoopMeta_o[0] = decode0_bus.tageMeta.loop;
+        branchCheckpointLoopMeta_o[1] = decode1_bus.tageMeta.loop;
         lsqAllocValid = robAllocValid & laneIsMemory;
 
         for (prepLane = 0; prepLane < 2; prepLane = prepLane + 1)

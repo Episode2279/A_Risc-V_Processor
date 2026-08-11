@@ -47,25 +47,37 @@ module TageHash
         (TABLE_ID == 1) ? INDEX_WIDTH'(8'h2b) :
         (TABLE_ID == 2) ? INDEX_WIDTH'(8'h4d) :
         (TABLE_ID == 3) ? INDEX_WIDTH'(8'h87) :
-                          INDEX_WIDTH'(8'hb9);
+        (TABLE_ID == 4) ? INDEX_WIDTH'(9'h0b9) :
+        (TABLE_ID == 5) ? INDEX_WIDTH'(9'h12d) :
+        (TABLE_ID == 6) ? INDEX_WIDTH'(9'h163) :
+                          INDEX_WIDTH'(9'h1cf);
     localparam logic [INDEX_WIDTH-1:0] INDEX_SEED =
         (TABLE_ID == 0) ? INDEX_WIDTH'(8'h13) :
         (TABLE_ID == 1) ? INDEX_WIDTH'(8'h35) :
         (TABLE_ID == 2) ? INDEX_WIDTH'(8'h59) :
         (TABLE_ID == 3) ? INDEX_WIDTH'(8'ha7) :
-                          INDEX_WIDTH'(8'hc3);
+        (TABLE_ID == 4) ? INDEX_WIDTH'(9'h0c3) :
+        (TABLE_ID == 5) ? INDEX_WIDTH'(9'h15d) :
+        (TABLE_ID == 6) ? INDEX_WIDTH'(9'h197) :
+                          INDEX_WIDTH'(9'h1e5);
     localparam logic [TAG_WIDTH-1:0] TAG_POLYNOMIAL =
         (TABLE_ID == 0) ? TAG_WIDTH'(16'h005b) :
         (TABLE_ID == 1) ? TAG_WIDTH'(16'h00b7) :
         (TABLE_ID == 2) ? TAG_WIDTH'(16'h016d) :
         (TABLE_ID == 3) ? TAG_WIDTH'(16'h02d5) :
-                          TAG_WIDTH'(16'h0539);
+        (TABLE_ID == 4) ? TAG_WIDTH'(16'h0539) :
+        (TABLE_ID == 5) ? TAG_WIDTH'(16'h0ca7) :
+        (TABLE_ID == 6) ? TAG_WIDTH'(16'h15b3) :
+                          TAG_WIDTH'(16'h2d2b);
     localparam logic [TAG_WIDTH-1:0] TAG_SEED =
         (TABLE_ID == 0) ? TAG_WIDTH'(16'h0025) :
         (TABLE_ID == 1) ? TAG_WIDTH'(16'h0067) :
         (TABLE_ID == 2) ? TAG_WIDTH'(16'h00d3) :
         (TABLE_ID == 3) ? TAG_WIDTH'(16'h01a9) :
-                          TAG_WIDTH'(16'h0357);
+        (TABLE_ID == 4) ? TAG_WIDTH'(16'h0357) :
+        (TABLE_ID == 5) ? TAG_WIDTH'(16'h06b5) :
+        (TABLE_ID == 6) ? TAG_WIDTH'(16'h0d4f) :
+                          TAG_WIDTH'(16'h1a93);
 
     function automatic logic [INDEX_WIDTH-1:0] rotateIndex(
         input logic [INDEX_WIDTH-1:0] value,

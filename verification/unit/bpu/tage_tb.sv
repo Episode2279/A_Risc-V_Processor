@@ -14,7 +14,7 @@ module tage_tb;
     localparam instruction_addr_t TAG_PC_B = 32'h0000_0800;
     localparam instruction_addr_t RECOVERY_PC = 32'h0000_0220;
     localparam tage_history_t RECOVERY_HISTORY =
-        64'h0000_0000_0000_1234;
+        tage_history_t'(64'h0000_0000_0000_1234);
     localparam tage_path_history_t RECOVERY_PATH = 16'h1357;
 
     logic clk = 1'b0;
@@ -74,7 +74,7 @@ module tage_tb;
     tage_history_t productionHashHistory;
     tage_path_history_t productionHashPathHistory;
     logic [TAGE_TABLE_NUM-1:0] productionHashMatch;
-    logic [63:0] hashHistoryLfsr;
+    tage_history_t hashHistoryLfsr;
     logic [15:0] hashPathLfsr;
 
     // Standalone Hash + tagged-table checker.
@@ -251,29 +251,37 @@ module tage_tb;
         .queryMeta_o(queryMeta),
         .queryPc1_i(queryPc1),
         .fallbackPrediction1_i(fallbackPrediction1),
+        .response0Conditional_i(query0Conditional),
         .query0Conditional_i(query0Conditional),
+        .query0Backward_i(1'b0),
         .query0Control_i(query0Control),
         .query0PathTaken_i(query0PathTaken),
         .queryMeta1_o(queryMeta1),
         .speculateValid_i(speculateValid),
         .speculateTaken_i(speculateTaken),
+        .speculateBackward_i(1'b0),
         .speculateValid1_i(speculateValid1),
         .speculateTaken1_i(speculateTaken1),
+        .speculateBackward1_i(1'b0),
         .speculateControlValid_i(speculateControlValid),
         .speculateControlValid1_i(speculateControlValid1),
         .updateValid_i(updateValid),
         .updateIsConditional_i(updateIsConditional),
-        .updatePc_i(updatePc), .updateTaken_i(updateTaken),
+        .updatePc_i(updatePc), .updateTarget_i(updatePc - 32'd4),
+        .updateTaken_i(updateTaken),
         .updateMeta_i(updateMeta),
         .updateReady_o(updateReady),
         .recoverValid_i(recoverValid), .recoverPc_i(recoverPc),
+        .recoverTarget_i(recoverPc - 32'd4),
         .recoverIsConditional_i(recoverIsConditional),
         .recoverTaken_i(recoverTaken),
         .recoverRobTag_i(recoverRobTag),
         .checkpointAllocValid_i(checkpointAllocValid),
         .checkpointAllocTag_i(checkpointAllocTag),
         .checkpointAllocHistory_i(checkpointAllocHistory),
-        .checkpointAllocPathHistory_i(checkpointAllocPathHistory)
+        .checkpointAllocPathHistory_i(checkpointAllocPathHistory),
+        .checkpointAllocLoopMeta_i('{default:'0}),
+        .checkpointAllocScImli_i('{default:'0})
     );
 
     TageFoldedHistory #(
@@ -362,12 +370,18 @@ module tage_tb;
                 (productionTable == 0) ? 4 :
                 (productionTable == 1) ? 8 :
                 (productionTable == 2) ? 16 :
-                (productionTable == 3) ? 32 : 64;
+                (productionTable == 3) ? 32 :
+                (productionTable == 4) ? 64 :
+                (productionTable == 5) ? 96 :
+                (productionTable == 6) ? 128 : 192;
             localparam int PRODUCTION_TAG_WIDTH =
                 (productionTable == 0) ? 7 :
                 (productionTable == 1) ? 8 :
                 (productionTable == 2) ? 9 :
-                (productionTable == 3) ? 10 : 11;
+                (productionTable == 3) ? 10 :
+                (productionTable == 4) ? 11 :
+                (productionTable == 5) ? 12 :
+                (productionTable == 6) ? 13 : 14;
 
             TageFoldConfigurationChecker #(
                 .HISTORY_LENGTH(PRODUCTION_HISTORY_LENGTH),
@@ -567,9 +581,13 @@ module tage_tb;
         folderReferenceHistory = '0;
         folderLfsr = 8'h5a;
         productionHashPc = 32'h0000_0140;
-        productionHashHistory = 64'h0123_4567_89ab_cdef;
+        productionHashHistory =
+            tage_history_t'(64'h0123_4567_89ab_cdef);
         productionHashPathHistory = 16'h5aa5;
-        hashHistoryLfsr = 64'hd134_2543_de82_ef95;
+        hashHistoryLfsr = {
+            64'h6a09_e667_f3bc_c909,
+            64'hbb67_ae85_84ca_a73b,
+            64'hd134_2543_de82_ef95};
         hashPathLfsr = 16'hb4d3;
         committedHistoryReference = '0;
         committedPathReference = '0;
@@ -618,7 +636,8 @@ module tage_tb;
                 folderLfsr[7] ^ folderLfsr[5] ^
                 folderLfsr[4] ^ folderLfsr[3]};
         end
-        folderRestoreHistory = 64'h5aa5_0f0f_c33c_9669;
+        folderRestoreHistory =
+            tage_history_t'(64'h5aa5_0f0f_c33c_9669);
         folderRestoreValid = 1'b1;
         tick();
         folderRestoreValid = 1'b0;
@@ -653,9 +672,11 @@ module tage_tb;
                     "production TAGE query/update Hash key mismatch step=%0d",
                     randomStep);
             hashHistoryLfsr = {
-                hashHistoryLfsr[62:0],
-                hashHistoryLfsr[63] ^ hashHistoryLfsr[62] ^
-                hashHistoryLfsr[60] ^ hashHistoryLfsr[59]};
+                hashHistoryLfsr[TAGE_HISTORY_WIDTH-2:0],
+                hashHistoryLfsr[TAGE_HISTORY_WIDTH-1] ^
+                hashHistoryLfsr[TAGE_HISTORY_WIDTH-2] ^
+                hashHistoryLfsr[TAGE_HISTORY_WIDTH-4] ^
+                hashHistoryLfsr[TAGE_HISTORY_WIDTH-5]};
             hashPathLfsr = {
                 hashPathLfsr[14:0],
                 hashPathLfsr[15] ^ hashPathLfsr[13] ^
@@ -1007,7 +1028,7 @@ module tage_tb;
             queryMeta.pathHistory != expectedPath)
             $fatal(1, "TAGE dual speculative state update failed");
 
-        // The fixed nonzero allocation LFSR begins at A5. Its first rotating
+        // The fixed nonzero allocation LFSR begins at 20. Its first rotating
         // search starts at T0 and the 1/4 double-allocation gate is open, so a
         // cold fallback miss reproducibly allocates exactly T0 and T1.
         queryPc = TAG_PC_A;
@@ -1017,10 +1038,13 @@ module tage_tb;
             $fatal(1, "unexpected provider before first TAGE allocation");
         train(TAG_PC_A, 1'b1, savedMeta);
         #1;
-        if (lastAllocationLfsr != 8'ha5 ||
-            lastAllocationMask != 5'b00011 ||
-            dut.allocationLfsr != 8'h4a)
-            $fatal(1, "TAGE deterministic double allocation failed");
+        if (lastAllocationLfsr != 8'h20 ||
+            lastAllocationMask != 8'b0000_0011 ||
+            dut.allocationLfsr != 8'h41)
+            $fatal(1,
+                "TAGE deterministic double allocation failed lfsr=%h mask=%b next=%h",
+                lastAllocationLfsr, lastAllocationMask,
+                dut.allocationLfsr);
         if (!queryMeta.providerValid ||
             queryMeta.provider != tage_provider_t'(1) ||
             !queryMeta.providerPrediction || !queryMeta.providerWeak ||
@@ -1031,7 +1055,7 @@ module tage_tb;
         savedMeta = queryMeta;
         train(TAG_PC_A, 1'b1, savedMeta);
         #1;
-        if (lastAllocationMask != '0 || dut.allocationLfsr != 8'h4a ||
+        if (lastAllocationMask != '0 || dut.allocationLfsr != 8'h41 ||
             !queryMeta.providerValid ||
             queryMeta.provider != tage_provider_t'(1))
             $fatal(1, "correct TAGE Provider unexpectedly allocated");
@@ -1403,25 +1427,37 @@ module TageHashConfigurationChecker
         (TABLE_ID == 1) ? INDEX_WIDTH'(8'h2b) :
         (TABLE_ID == 2) ? INDEX_WIDTH'(8'h4d) :
         (TABLE_ID == 3) ? INDEX_WIDTH'(8'h87) :
-                          INDEX_WIDTH'(8'hb9);
+        (TABLE_ID == 4) ? INDEX_WIDTH'(9'h0b9) :
+        (TABLE_ID == 5) ? INDEX_WIDTH'(9'h12d) :
+        (TABLE_ID == 6) ? INDEX_WIDTH'(9'h163) :
+                          INDEX_WIDTH'(9'h1cf);
     localparam logic [INDEX_WIDTH-1:0] INDEX_SEED =
         (TABLE_ID == 0) ? INDEX_WIDTH'(8'h13) :
         (TABLE_ID == 1) ? INDEX_WIDTH'(8'h35) :
         (TABLE_ID == 2) ? INDEX_WIDTH'(8'h59) :
         (TABLE_ID == 3) ? INDEX_WIDTH'(8'ha7) :
-                          INDEX_WIDTH'(8'hc3);
+        (TABLE_ID == 4) ? INDEX_WIDTH'(9'h0c3) :
+        (TABLE_ID == 5) ? INDEX_WIDTH'(9'h15d) :
+        (TABLE_ID == 6) ? INDEX_WIDTH'(9'h197) :
+                          INDEX_WIDTH'(9'h1e5);
     localparam logic [TAG_WIDTH-1:0] TAG_POLYNOMIAL =
         (TABLE_ID == 0) ? TAG_WIDTH'(16'h005b) :
         (TABLE_ID == 1) ? TAG_WIDTH'(16'h00b7) :
         (TABLE_ID == 2) ? TAG_WIDTH'(16'h016d) :
         (TABLE_ID == 3) ? TAG_WIDTH'(16'h02d5) :
-                          TAG_WIDTH'(16'h0539);
+        (TABLE_ID == 4) ? TAG_WIDTH'(16'h0539) :
+        (TABLE_ID == 5) ? TAG_WIDTH'(16'h0ca7) :
+        (TABLE_ID == 6) ? TAG_WIDTH'(16'h15b3) :
+                          TAG_WIDTH'(16'h2d2b);
     localparam logic [TAG_WIDTH-1:0] TAG_SEED =
         (TABLE_ID == 0) ? TAG_WIDTH'(16'h0025) :
         (TABLE_ID == 1) ? TAG_WIDTH'(16'h0067) :
         (TABLE_ID == 2) ? TAG_WIDTH'(16'h00d3) :
         (TABLE_ID == 3) ? TAG_WIDTH'(16'h01a9) :
-                          TAG_WIDTH'(16'h0357);
+        (TABLE_ID == 4) ? TAG_WIDTH'(16'h0357) :
+        (TABLE_ID == 5) ? TAG_WIDTH'(16'h06b5) :
+        (TABLE_ID == 6) ? TAG_WIDTH'(16'h0d4f) :
+                          TAG_WIDTH'(16'h1a93);
 
     logic [INDEX_WIDTH-1:0] indexFold;
     logic [TAG_WIDTH-1:0] tagFoldA;

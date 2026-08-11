@@ -75,7 +75,7 @@ interstage registers, restores program order at retirement.
 | Logical stage | Width | Main RTL | Current behavior |
 | --- | ---: | --- | --- |
 | 1. F0 fetch request | 2 instruction addresses | `DualIfStages.sv`, `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageFoldedHistory.sv`, `TageHash.sv` | An accepted `PC`/`PC+4` pair launches the two-address synchronous I-cache tag/data lookup and the PC-indexed BPU lookup in parallel. No instruction word is read combinationally in F0. Post-accept or recovered GHR/Path History and precomputed folds generate the synchronous TAGE/SC table addresses. |
-| 2. F1 cache/prediction response and next PC | 2 instructions | `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageTable.sv`, `StatisticalCorrector.sv`, BTB/GShare/RAS | I-cache hit data is aligned with the retained BPU request context and registered TAGE/SC response. Provider/alternate selection produces the raw TAGE direction, SC may correct it, and target selection chooses the following request PC. A taken slot-0 response suppresses slot 1. An I-cache miss blocks this request, refills each missing 16-byte line with four backing-memory words, and internally retries the lookup before F1 becomes valid. |
+| 2. F1 cache/prediction response and next PC | 2 instructions | `InstructionCache.sv`, `BranchPredictionUnit.sv`, `TageTable.sv`, `LoopPredictor.sv`, `StatisticalCorrector.sv`, BTB/Bimodal/RAS | I-cache hit data is aligned with the retained BPU request context and registered predictor response. Provider/alternate selection produces raw TAGE, a confident Loop entry may replace it, SC may make the final correction, and target selection chooses the following request PC. A taken slot-0 response suppresses slot 1. An I-cache miss blocks this request, refills each missing 16-byte line with four backing-memory words, and internally retries the lookup before F1 becomes valid. |
 | 3. Fetch queue | 8 instructions, 2-wide enqueue/dequeue | `FetchQueue.sv` | Decouples synchronous F1 responses from decode/rename. It accepts a predicted bundle atomically, supplies the oldest two instructions, preserves a lone younger instruction after single dispatch, and flushes all speculative contents on redirect. |
 | 4. Decode | 2 instructions | `IdStages.sv`, `Decoder.sv` | Decodes RV32 control, architectural source/destination registers, immediates, memory width, branch type, CSR operation, and decode exceptions. This logic is combinational. |
 | 5. Rename and dispatch | 2 uops | `BackendDispatchStage.sv`, `RenameStage.sv` | Checks ROB/IQ/LSQ/free-PRF capacity atomically, translates architectural registers through the speculative RAT, allocates physical destinations, and inserts accepted uops into the ROB and IQ; memory uops also enter the LSQ. |
@@ -117,10 +117,10 @@ Prediction spans the fetch-request and registered-response stages, while branch
 direction and target resolve in the execute stage. A misprediction redirects
 the fetch PC, flushes the Fetch Queue, removes younger ROB/IQ/LSQ entries,
 restores RAT and free-list state,
-and recovers the 10-bit GShare history, 64-bit TAGE direction history, and
+and recovers the 192-bit TAGE direction history and
 16-bit TAGE Path History from the resolving branch's ROB-tagged checkpoints.
 The resolving branch remains in the ROB and later retires normally. Tagged
-tables, the GShare PHT, SC signed counters, BTB, and branch-statistics updates
+tables, the Bimodal PHT, SC signed counters, BTB, and branch-statistics updates
 occur at retirement, not on the speculative execute path.
 
 Decode and execution exceptions are stored in the ROB. Even if a younger uop
@@ -230,26 +230,34 @@ wrapper to report idle, which includes an accepted backing-memory transaction.
 
 ## Branch prediction
 
-The default direction path is a five-table TAGE predictor over a GShare
-base/alternate, followed by a compact statistical corrector (SC-Lite). The
+The default direction path is an eight-table TAGE predictor over a Bimodal
+base/alternate, followed by a counted-loop predictor and a multi-component
+TAGE-SC-L-style statistical corrector. The
 standalone local-history predictor and Tournament chooser have been removed.
 Target prediction uses a two-way BTB, direct-JAL decoding, and a RAS.
 `BPU_SC_ENABLE=0` bypasses only SC for raw-TAGE A/B testing;
-`BPU_TAGE_ENABLE=0` selects pure GShare.
+`BPU_LOOP_ENABLE=0` bypasses only the Loop Predictor;
+`BPU_TAGE_ENABLE=0` selects pure Bimodal.
 
 | Variable/module parameter | Value | Structure produced | Explanation |
 | --- | ---: | ---: | --- |
-| `BPU_HISTORY_WIDTH` | 10 bits | 1,024-entry GShare PHT | Defines the speculative GShare GHR length and index width. |
-| `TAGE_HISTORY_WIDTH` | 64 bits | 64-bit speculative TAGE GHR | Maximum global correlation history available to the tagged tables and SC. |
+| `BPU_BASE_INDEX_WIDTH` | 10 bits | 1,024-entry Bimodal PHT | Defines the PC-index width; Bimodal has no GHR. |
+| `TAGE_HISTORY_WIDTH` | 192 bits | 192-bit speculative TAGE GHR | Maximum global correlation history available to the tagged tables and SC. |
 | `TAGE_PATH_HISTORY_WIDTH` | 16 bits | 16-bit control-path signature | Distinguishes equal direction patterns reached through different control-flow paths. |
-| `TAGE_TABLE_NUM` | 5 | Histories 4/8/16/32/64 | Number of tagged Provider tables searched in parallel. |
-| `TAGE_TABLE_ENTRIES` | 256/table | 1,280 tagged entries | Every table has an 8-bit Index. |
-| TAGE tag widths | 7/8/9/10/11 bits | 23,040 physical Tag-RAM bits | Two read-lane Tag replicas provide two synchronous lookups; CBP logical accounting charges one copy. |
-| `TAGE_GENERATION_WIDTH` | 5 bits/entry | 6,400 generation bits | Thirty-two entry versions reject stale queued retirement updates. |
-| TAGE shadow state | 6 bits/entry | 7,680 valid/counter/useful bits | Shared between the two Tag-RAM read replicas. |
-| SC PC bias | 256 × signed 6-bit | 1,536 bits | PC-only residual tendency; its value is weighted by two in the score. |
-| SC GEHL | 4 × 128 × signed 6-bit | 3,072 bits | Uses direction histories 3/7/15/31 plus independent PC/Path hashes. |
-| SC folds | 4 × 7-bit | 28 bits | Incrementally maintained folds keep full-GHR compression off the request path. |
+| `TAGE_TABLE_NUM` | 8 | Histories 4/8/16/32/64/96/128/192 | Number of tagged Provider tables searched in parallel. |
+| `TAGE_TABLE_ENTRIES` | 512/table | 4,096 tagged entries | Every table has a 9-bit Index. |
+| TAGE tag widths | 7/8/9/10/11/12/13/14 bits | 43,008 logical tag bits | Two read-lane Tag replicas provide two synchronous lookups; logical accounting charges one copy. |
+| `TAGE_GENERATION_WIDTH` | 5 bits/entry | 20,480 generation bits | Thirty-two entry versions reject stale queued retirement updates. |
+| TAGE shadow state | 6 bits/entry | 24,576 valid/counter/useful bits | Shared between the two Tag-RAM read replicas. |
+| Loop table | 64 entries | 2,752 bits | Learns stable trip counts for backward conditional loops; uses 12-bit tags and 10-bit counts. |
+| Loop speculative action log | 32 actions | Recovery-only state | Tracks predicted loop iterations and is truncated to a ROB checkpoint on recovery. |
+| SC Multi-Bias | 2 × 256 × signed 6-bit | 3,072 bits | Combines a pure PC tendency with a PC/short-history/base-confidence tendency; the family sum is half-weighted. |
+| SC Global GEHL | 6 × 256 × signed 6-bit | 9,216 bits | Uses global histories 2/6/12/24/48/192 with independent PC/Path mixing; its family sum is half-weighted. |
+| SC Local history/GEHL | 256 × 12-bit LHT + 4 × 512 × signed 6-bit | 15,360 bits | Learns correlations tied to the recent outcomes of the same PC. |
+| SC IMLI GEHL | 3 × 256 × signed 6-bit | 4,608 bits | Uses pure IMLI, IMLI+global, and IMLI+global/path modes around a speculative, recoverable 10-bit iteration count. |
+| SC Path GEHL | 3 × 256 × signed 6-bit | 4,608 bits | Uses 4/8/16-bit control-path windows independent of direction-only global history. |
+| SC adaptive threshold | 32 × signed 6-bit | 192 bits | Per-PC-class feedback makes correction/training more conservative after harmful overrides. |
+| SC folds | 6 × 8-bit | 48 bits | Incrementally maintained global folds keep 192-bit compression off the request path. |
 | `BPU_SC_LOW_CONFIDENCE_THRESHOLD` | 23 | Score interval `[-23,+23]` | Low-confidence retired predictions train SC even when correct. |
 | `BPU_SC_WEAK_BASE_WEIGHT` | 20 | Signed weak TAGE vote | Protects an untrained SC from immediately overriding the base decision. |
 | `BPU_SC_STRONG_BASE_WEIGHT` | 62 | Signed strong TAGE vote | Gives a non-weak tagged Provider more resistance to correction. |
@@ -259,21 +267,22 @@ Target prediction uses a two-way BTB, direct-JAL decoding, and a RAS.
 
 ### TAGE Provider selection
 
-`TagePredictor.sv` searches five independent 256-entry tagged tables with
-history lengths 4, 8, 16, 32, and 64. Each logical entry contains a valid bit,
+`TagePredictor.sv` searches eight independent 512-entry tagged tables with
+history lengths 4, 8, 16, 32, 64, 96, 128, and 192. Each logical entry contains a valid bit,
 a PC/direction/path tag, a three-bit saturating direction counter, a two-bit
 useful counter, and a five-bit generation. The Tag RAM is physically replicated
 for two prediction lanes; including both Tag copies and shared shadow state, the
-five tables use 37,120 physical bits before other BPU structures. This physical
-figure is deliberately distinct from the CBP logical-capacity count below.
+eight tables use more physical bits than the charged logical copy because the
+Tag RAM is duplicated for both fetch lanes. This physical figure is deliberately
+distinct from the CBP logical-capacity count below.
 
 `TageFoldedHistory.sv` incrementally maintains three direction-history folds
-for each table: an 8-bit Index fold, a Tag-width fold, and a
-`Tag-width-1` fold. Across the five tables these live registers use 125 bits.
+for each table: a 9-bit Index fold, a Tag-width fold, and a
+`Tag-width-1` fold. Across the eight tables these live registers use 232 bits.
 For a history window of length `H` and fold width `C`, one conditional branch
 rotates the existing fold, XORs the incoming direction into bit zero, and XORs
 the outgoing `GHR[H-1]` into bit `H mod C`. Normal prediction therefore reads
-precomputed folds rather than repeatedly folding up to 64 history bits.
+precomputed folds rather than repeatedly folding up to 192 history bits.
 Recovery reconstructs all folds from the restored full GHR.
 
 `TageHash.sv` combines those folds with PC and the 16-bit Path History. Index
@@ -283,9 +292,9 @@ Tag mixing turns many Index aliases into Tag mismatches instead of correlated
 false hits.
 
 The longest matching table is the Provider. The next-shortest match is the
-Alternate; if no shorter table hits, GShare is the Alternate. A new Provider
+Alternate; if no shorter table hits, Bimodal is the Alternate. A new Provider
 with usefulness zero and a weak direction counter may temporarily use the
-Alternate. Six four-bit `useAlternateOnNew` counters group Providers by history
+Alternate. Eight four-bit `useAlternateOnNew` counters group Providers by history
 class and PC class. The result after Provider/Alternate/UAN selection is saved
 as `tagePrediction`, the raw direction before SC.
 
@@ -302,47 +311,101 @@ than the Provider, and one quarter of attempts may allocate a second distinct
 entry. Grouped pressure counters and incremental aging gradually release stale
 usefulness-protected entries.
 
-Each table is split into two 128-row banks. Index bit zero selects the bank and
-the remaining seven bits select the row. Each bank has one Tag-RAM copy per
+Each table is split into two 256-row banks. Index bit zero selects the bank and
+the remaining eight bits select the row. Each bank has one Tag-RAM copy per
 fetch lane, while valid/counter/useful/generation shadow state is shared. Reads
 are synchronous and registered. Allocation, Provider update, pressure, and
 aging have explicit same-cycle forwarding. A saved generation must still match
 at retirement, so a delayed update cannot modify a replacement occupant.
 
+### Loop Predictor
+
+`LoopPredictor.sv` is a 64-entry direct-mapped counted-loop predictor. Each
+entry contains valid, a 12-bit hashed-PC tag, the learned 10-bit trip count, a
+10-bit committed iteration count, a three-bit confidence counter, a two-bit
+age counter, the repeated-loop direction, and a four-bit generation. New
+entries are allocated only for retired Taken backward conditional branches;
+this avoids spending entries on forward branches and irregular control flow.
+
+A matching entry predicts the repeated direction while the speculative next
+iteration is below the learned trip count, then predicts the opposite direction
+for the loop exit. It may override raw TAGE only after its confidence saturates
+at seven. The selected result is saved as `preScPrediction`; SC then receives
+that direction as its base vote. A confident Loop result is treated as a strong
+base so weak SC evidence cannot easily overturn a learned trip count.
+
+The table itself trains only from retired branches. Prediction-time iteration
+changes are held in a 32-entry speculative action log instead of modifying the
+committed table state. Every renamed control-flow instruction saves the
+corresponding action-log tail in its ROB checkpoint. On a branch recovery, the
+log discards younger actions, restores the resolving branch's pre-prediction
+iteration, and appends its actual outcome. Entry generation and tag checks keep
+old checkpoints from modifying a replacement occupant.
+
 ### Statistical corrector
 
-`StatisticalCorrector.sv` contains one 256-entry PC-bias table and four
-128-entry GEHL tables. All counters are signed six-bit values and reset to zero.
-The GEHL histories are 3, 7, 15, and 31 directions; four incremental seven-bit
-folds are maintained beside the existing TAGE folds. SC does not duplicate the
-64-bit GHR or 16-bit Path History.
+`StatisticalCorrector.sv` contains five feature families, all using signed
+six-bit counters: two 256-entry Multi-Bias tables, six 256-entry Global GEHL
+tables, four 512-entry Local GEHL tables backed by a 256-entry 12-bit local
+history table, three 256-entry IMLI GEHL tables, and three 256-entry Path GEHL
+tables. Global history lengths are 2/6/12/24/48/192. Six incremental eight-bit
+folds are maintained beside the TAGE folds, so SC does not duplicate or
+recompress the 192-bit GHR on the prediction critical path.
 
-The four GEHL tables and PC-bias table are read synchronously in parallel with
-the tagged TAGE tables. Their registered response is combined with the raw
-TAGE/UAN decision in the same response cycle, so SC adds no new front-end stage:
+The Local tables use 3/6/9/12 outcome bits from the same-PC history. The IMLI
+tables deliberately use different signatures: pure iteration count,
+iteration+global history, and iteration+global/path history. The Path family
+uses independent 4/8/16-bit path windows. Multi-Bias separates a pure
+PC-indexed tendency from a context-sensitive PC/short-history/base-confidence
+tendency.
+
+IMLI is a speculative 10-bit inner-loop iteration counter. A predicted Taken
+backward conditional increments it, a predicted Not-Taken backward conditional
+clears it, and every unresolved branch checkpoint carries its pre-branch IMLI.
+Misprediction recovery restores that value and applies the actual resolving
+outcome. Local history is updated from the in-order retirement stream; the
+prediction-time 12-bit snapshot is retained in ROB metadata for precise
+training.
+
+All 18 counter tables are read synchronously in parallel with tagged TAGE and
+Loop. Their registered response is combined with the Loop-selected base in the
+same response cycle, so SC adds no new front-end stage:
 
 ```text
-componentScore = 2*bias + gehl3 + gehl7 + gehl15 + gehl31
-baseVote       = tagePrediction ? +(strong ? 62 : 20)
-                                : -(strong ? 62 : 20)
+componentScore = sum(multiBias[0..1]) / 2
+               + sum(globalGEHL[0..5]) / 2
+               + sum(localGEHL[0..3])
+               + sum(imliGEHL[0..2])
+               + sum(pathGEHL[0..2])
+baseVote       = preScPrediction ? +(strong ? 62 : 20)
+                                 : -(strong ? 62 : 20)
 finalScore     = componentScore + baseVote
 ```
 
 A positive score predicts Taken, a negative score predicts Not-Taken, and zero
-keeps `tagePrediction`. The post-SC result is stored in `finalPrediction`. The
-decision is low-confidence when `abs(finalScore) <= 23`. At retirement, all SC
+keeps `preScPrediction`. The post-SC result is stored in `finalPrediction`. The
+base threshold is 23, adjusted by one of 32 signed six-bit threshold
+counters selected by PC. Harmful, high-confidence overrides make the selected
+threshold more conservative; useful low-confidence overrides make it more
+permissive. A weak base may be overturned only when at least two valid feature
+families agree with the candidate; a strong base additionally requires the
+score to clear the dynamic threshold and at least three agreeing families.
+The two half weights normalize correlated families so that simply having more
+tables does not give Global or Multi-Bias an accidental voting advantage. At
+retirement, all SC
 counters move one step toward the actual result when `finalPrediction` was
 wrong or the saved decision was low-confidence. Same-address request/update
 collisions forward the trained value. Squashed branches never reach this path.
 
 Prediction metadata containing GHR, Path History, Provider/Alternate decisions,
-Provider generation, raw `tagePrediction`, final `finalPrediction`, and SC
-confidence travels through the fetch window into the ROB. Retired conditional
-updates enter the four-entry FIFO and train through one shared update stream.
+Provider generation, raw `tagePrediction`, Loop metadata,
+`preScPrediction`, final `finalPrediction`, and SC confidence travels through
+the fetch window into the ROB. Retired conditional updates enter the four-entry
+FIFO and train through one shared update stream.
 
-### Speculative history and GShare
+### Speculative history and Bimodal base
 
-TAGE has an independent 64-bit speculative direction history and a 16-bit
+TAGE has an independent 192-bit speculative direction history and a 16-bit
 speculative Path History. Direction history advances only for conditional
 branches. Path History advances for every accepted conditional branch, JAL, or
 JALR. Slot 1 is queried with the virtual fall-through state after Slot 0. Each
@@ -351,41 +414,44 @@ Execute-stage recovery restores the pre-branch checkpoint and appends the
 resolving control event; precise traps restore retirement-updated committed
 history shadows.
 
-GShare uses a separate 10-bit GHR and a 1,024-entry table of two-bit counters:
+Bimodal uses a 1,024-entry table of two-bit counters:
 
 ```text
-GShare index = PC[11:2] XOR GHR
+Bimodal index = PC[11:2]
 ```
 
-Its history also updates speculatively and recovers from a ROB-tagged
-checkpoint. GShare counters train only from the in-order retirement stream.
-Increasing `BPU_HISTORY_WIDTH` doubles the PHT for every added bit but is not
-automatically more accurate because unrelated older branches may add noise.
+Bimodal has no speculative history, checkpoint, or recovery state. Its
+counters train only from the in-order retirement stream. Increasing
+`BPU_HISTORY_WIDTH` doubles the PHT for every added index bit.
 
-### CBP 4 KiB logical-state accounting
+### Logical-state accounting
 
-The project enforces the following logical conditional-direction-predictor
-budget with elaboration checks:
+The predictor uses the following CBP-style logical-state accounting and is
+elaboration-time checked against a 16 KiB limit:
 
 | Charged logical state | Bits |
 | --- | ---: |
-| Existing TAGE + GShare baseline | 27,917 |
-| SC counters: `256*6 + 4*128*6` | 4,608 |
-| Four SC incremental folds: `4*7` | 28 |
-| **Total** | **32,553** |
-| CBP 4 KiB limit | 32,768 |
-| **Remaining** | **215** |
+| TAGE + Bimodal baseline | 90,617 |
+| Loop table: `64*(1+12+10+10+3+2+1+4)` | 2,752 |
+| SC signed counters | 33,792 |
+| SC local history + adaptive threshold + IMLI | 3,274 |
+| Six SC incremental folds | 48 |
+| **Total** | **130,483** |
+| CBP-style 16 KiB limit | 131,072 |
+| **Headroom** | **589** |
 
-The result is 4,069.125 bytes, leaving 26.875 bytes. The deleted standalone
-Local predictor occupied `256*10 + 1024*2 = 4,608` bits, and the deleted
-512-entry two-bit chooser occupied 1,024 bits. The new SC counter budget equals
-the old Local predictor but no longer pays the chooser cost.
+The result is 16,310.375 bytes, about 15.928 KiB.
+`BPU_ENFORCE_CBP_STORAGE_LIMIT=1` is enabled by default and fails elaboration
+if later geometry changes exceed 131,072 charged bits.
 
 This is a CBP-style logical-state accounting convention, not the literal
 synthesized RAM usage. Dual-lane Tag copies, physical banking/replication needed
 for multiported reads, committed-history shadows, ROB recovery checkpoints,
 update FIFOs, prediction metadata, BTB, and RAS remain real physical hardware
 but are outside this logical conditional-direction-predictor budget.
+The Loop action log and ROB checkpoints are likewise recovery machinery rather
+than persistent prediction tables, so they are excluded from this CBP-style
+number while still counting toward synthesized hardware.
 
 ### BTB and RAS
 
@@ -399,7 +465,54 @@ speculative and committed views. Calls push `PC + 4`, and recognized returns pop
 the top entry. The current RAS committed shadow is still updated at execute
 resolution; adding a per-branch RAS checkpoint/action log remains future work.
 
-### CoreMark predictor A/B result
+### Current TAGE capacity/Base A/B result
+
+These runs use the same one-iteration RV32I CoreMark image, synchronous-cache
+model, SC settings, and backend. They isolate the Base replacement and tagged
+table capacity:
+
+| Configuration | Cycles | Retired | IPC | Conditional misses | Miss rate | Conditional MPKI |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5x256 TAGE + GShare + SC | 591,945 | 859,559 | 1.4521 | 26,020 | 11.0388% | 30.2713 |
+| 5x256 TAGE + Bimodal + SC | 589,162 | 859,556 | 1.4589 | 25,020 | 10.6145% | 29.1081 |
+| 5x512 TAGE + Bimodal + SC | 583,760 | 859,574 | 1.4725 | 23,313 | 9.8900% | 27.1216 |
+| 5x512 TAGE + Bimodal + Loop + SC | 583,038 | 859,558 | 1.4743 | 23,033 | 9.7712% | 26.7963 |
+| 8x512 TAGE + Bimodal + Loop + 4-family SC | 580,834 | 859,567 | 1.4799 | 22,392 | 9.4993% | 26.0503 |
+| 8x512 TAGE + Bimodal + Loop + 5-family normalized SC | 580,436 | 859,534 | 1.4808 | 22,234 | 9.4323% | 25.8675 |
+
+Replacing GShare with Bimodal at unchanged tagged capacity removes 1,000
+conditional misses. Doubling each tagged table then removes another 1,707.
+Combined, conditional misses fall 10.404%, cycles fall 1.383%, and IPC rises
+1.405%. This result is workload-specific and comes with the logical-state
+increase from 32,553 to 60,901 bits.
+
+Against the immediately preceding 5x512+Bimodal+SC configuration, the tuned
+Loop Predictor removes another 280 conditional misses, reduces cycles by 722,
+and raises IPC by about 0.122%. During the enabled run it made 483 predictions
+different from raw TAGE: 425 corrected a TAGE miss and 58 harmed a correct TAGE
+decision, a net benefit of 367 before later SC interaction. These figures are
+trajectory-dependent; the cross-run miss delta need not equal the internal
+override balance.
+
+The original 16 KiB configuration removes 641 conditional misses (2.783%) and raises
+overall IPC by about 0.380% relative to the 5x512+Bimodal+Loop+SC row. Its SC
+made 7,321 overrides: 3,770 corrections and 3,551 harms, net +219. The Loop
+Predictor contributed a further net +363 overrides. These modest gains show
+that the remaining CoreMark misses are not primarily simple table-capacity
+misses; alias control and better feature/threshold tuning matter more than
+another uniform capacity increase.
+
+Repartitioning the same 16 KiB class into five SC feature families and
+normalizing the correlated Multi-Bias and Global sums removes another 158
+conditional misses (0.706%), reduces cycles by 398, and raises IPC by about
+0.061% versus the preceding 4-family SC. The final SC makes 6,301 overrides:
+3,270 corrections and 3,031 harms, net +239. Support attribution is positive
+for every family on this trajectory: Bias +27, Global +152, Local +249,
+IMLI +300, and Path +263. Attribution overlaps because several families may
+support the same final override; those numbers must not be summed as unique
+corrected branches.
+
+### Historical SC enable/disable A/B result
 
 The following predictor-only snapshot predates the synchronous cache timing
 changes. The runs use the same RV32I CoreMark image with 10 iterations,
@@ -421,6 +534,32 @@ These are simulator performance comparisons, not an official CoreMark score.
 Both runs produce the expected CRCs and terminate successfully through
 `tohost`. CoreMark still prints its standard `Errors detected` duration warning
 because ten simulated iterations represent less than the required ten seconds.
+
+### CBP2025 RTL trace result
+
+The optional `verification/perf/cbp/` adapter drives the production
+Bimodal+TAGE+Loop+SC RTL from the official CBP2025 callback interface. CBP's
+resolved direction advances correct-path speculative GHR/Path/IMLI immediately,
+as explicitly permitted by that framework, while persistent predictor tables
+retain this core's retirement-training behavior. Nonconditional control flow
+updates Path History but is excluded from conditional-direction scoring.
+
+CBP2025 uses 64-bit trace PCs, so the adapter XOR-folds their upper and lower
+halves into the core's 32-bit PC while preserving instruction-alignment bits.
+This is an unavoidable cross-ISA mapping and means the result evaluates the
+current RTL algorithm and capacity, not a native 64-bit implementation.
+
+| Predictor | Charged storage | Instructions | Conditional branches | Mispredictions | Miss rate | BrMisPKI |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Current RTL Bimodal+TAGE+Loop+SC | 15.928 KiB | 997,301 | 128,874 | 298 | 0.2312% | 0.2988 |
+| Official CBP2016 TAGE-SC-L reference | 64 KiB | 997,301 | 128,874 | 264 | 0.2049% | 0.2647 |
+
+Raw TAGE and the Loop-selected pre-SC direction each miss 299 times in the RTL
+run. SC makes three overrides, two corrective and one harmful, for a net one
+fewer miss; the Loop Predictor makes no override. This short official sample
+validates integration but is not a representative championship score. Several
+full training traces and their arithmetic-mean MPKI are required for a robust
+comparison.
 
 ### Current synchronous-cache integration result
 
@@ -531,12 +670,13 @@ field.
 - `UNIFIED_IQ_ENTRY_NUM` and `LSQ_ENTRY_NUM` are independent. A memory uop
   consumes one slot in each structure, so dispatch checks both free counts, but
   changing either parameter no longer silently changes the other structure.
-- `BPU_HISTORY_WIDTH=N` creates `2^N` GShare counters. Increasing it changes
-  both the GShare PHT size and the GShare checkpoint width.
-- `TAGE_HISTORY_WIDTH` is independent of `BPU_HISTORY_WIDTH`; increasing it
-  does not enlarge the GShare PHT. TAGE/SC table counts, entries, history
+- `BPU_BASE_INDEX_WIDTH=N` creates `2^N` Bimodal counters. Increasing it changes
+  the Bimodal PHT size; the base predictor has no history checkpoint.
+- `TAGE_HISTORY_WIDTH` is independent of `BPU_BASE_INDEX_WIDTH`; increasing it
+  does not enlarge the Bimodal PHT. TAGE/SC table counts, entries, history
   schedules, fold widths, and tags must be changed consistently. Any change
-  must also update and satisfy the CBP logical-storage assertions.
+  must also update logical-storage accounting; enable the CBP limit assertion
+  only for configurations intended to fit 4 KiB.
 - Larger structures increase the amount of exploitable instruction-level
   parallelism or reduce predictor aliasing, but also increase FPGA area,
   simulation cost, reset work, and potentially the critical path.

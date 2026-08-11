@@ -17,10 +17,14 @@ TRACE_DIR := $(BUILD_DIR)/traces
 VERILATOR_DIR := $(BUILD_DIR)/verilator
 TOP_BUILD_DIR := $(VERILATOR_DIR)/top
 ACT4_BUILD_DIR := $(VERILATOR_DIR)/act4
+CBP_BUILD_DIR := $(VERILATOR_DIR)/cbp-rtl
 CORE_FILELIST := $(FILELIST_DIR)/core.f
+CBP_FILELIST := $(FILELIST_DIR)/cbp_rtl.f
 CSR_SMOKE_DIR ?= /tmp/a_riscv_processor_csr_smoke
 ACT4_WORK_DIR := $(PROJECT_DIR)/compliance/act4/work
 ARCH_TEST_WORK_DIR := $(PROJECT_DIR)/third_party/riscv-arch-test/work
+CBP_FRAMEWORK_DIR ?= $(PROJECT_DIR)/third_party/cbp2025/framework
+CBP_TRACE ?= $(PROJECT_DIR)/third_party/cbp2025/sample_traces/int/sample_int_trace.gz
 
 TOP ?= topCPU
 TB_TOP ?= topCPU_tb
@@ -50,10 +54,11 @@ ifneq ($(filter 1 true yes on,$(TRACE)),)
 TRACE_ARG := +trace
 endif
 
-.PHONY: all help sim coremark lint fetch-queue-smoke bpu-smoke tage-smoke tage-update-smoke \
+.PHONY: all help sim coremark lint fetch-queue-smoke bpu-smoke loop-smoke tage-smoke tage-update-smoke \
 	sc-smoke icache-smoke dcache-smoke cache-smoke store-buffer-smoke \
 	lsu-pending-smoke ooo-smoke ooo-backend-smoke rv32i-compliance-smoke \
-	act4-build act4-run build run kanata kanata-legacy konata csr-smoke \
+	act4-build act4-run cbp-build cbp-run cbp-sample build run \
+	kanata kanata-legacy konata csr-smoke \
 	vivado-project vivado-sim vivado-synth clean clean-cache clean-verilator clean-logs \
 	clean-coremark clean-compliance clean-temporary clean-generated clean-all
 
@@ -65,7 +70,8 @@ help:
 	@printf "  make coremark         Rebuild CoreMark and build/images/*.mem\n"
 	@printf "  make lint             Verilator lint for RTL plus integration testbench\n"
 	@printf "  make fetch-queue-smoke Test buffered dual-fetch enqueue/dequeue/flush\n"
-	@printf "  make bpu-smoke        Run GShare-base direction and BTB tests\n"
+	@printf "  make bpu-smoke        Run Bimodal-base direction and BTB tests\n"
+	@printf "  make loop-smoke       Run Loop Predictor trip-count/recovery tests\n"
 	@printf "  make tage-smoke       Run tagged-table/TAGE predictor tests\n"
 	@printf "  make tage-update-smoke Run TAGE update-queue FIFO tests\n"
 	@printf "  make sc-smoke         Run statistical-corrector timing/training tests\n"
@@ -79,6 +85,9 @@ help:
 	@printf "  make rv32i-compliance-smoke Run directed RV32I decode/trap tests\n"
 	@printf "  make act4-build       Build the 1 MiB ACT4 Verilator model\n"
 	@printf "  make act4-run         Run generated ACT4 RV32I ELFs on the DUT\n"
+	@printf "  make cbp-build        Build the CBP2025-to-RTL direction adapter\n"
+	@printf "  make cbp-sample       Run the official CBP2025 integer sample trace\n"
+	@printf "  make cbp-run CBP_TRACE=<trace.gz> Run any CBP2025 trace\n"
 	@printf "  make build            Build build/verilator/top/V$(TOP)\n"
 	@printf "  make run              Run the Verilator model from the project root\n"
 	@printf "  make kanata           Convert the V2 OoO dump to a Kanata trace\n"
@@ -133,6 +142,15 @@ bpu-smoke:
 		--Mdir "$(VERILATOR_DIR)/bpu"
 	"$(VERILATOR_DIR)/bpu/Vbpu_tb"
 
+loop-smoke:
+	mkdir -p "$(VERILATOR_DIR)/loop"
+	cd "$(PROJECT_DIR)" && \
+	$(VERILATOR) --binary $(VERILATOR_FLAGS) \
+		rtl/common/TypesPkg.sv rtl/frontend/bpu/LoopPredictor.sv \
+		"$(VERIFICATION_DIR)/unit/bpu/loop_predictor_tb.sv" \
+		--top-module loop_predictor_tb --Mdir "$(VERILATOR_DIR)/loop"
+	"$(VERILATOR_DIR)/loop/Vloop_predictor_tb"
+
 tage-smoke:
 	mkdir -p "$(VERILATOR_DIR)/tage"
 	cd "$(PROJECT_DIR)" && \
@@ -153,7 +171,8 @@ sc-smoke:
 	mkdir -p "$(VERILATOR_DIR)/sc"
 	cd "$(PROJECT_DIR)" && \
 	$(VERILATOR) --binary $(VERILATOR_FLAGS) \
-		rtl/common/TypesPkg.sv rtl/frontend/bpu/StatisticalCorrector.sv \
+		rtl/common/TypesPkg.sv rtl/frontend/bpu/ScSignedCounterTable.sv \
+		rtl/frontend/bpu/StatisticalCorrector.sv \
 		"$(VERIFICATION_DIR)/unit/bpu/sc_tb.sv" --top-module sc_tb \
 		--Mdir "$(VERILATOR_DIR)/sc"
 	"$(VERILATOR_DIR)/sc/Vsc_tb"
@@ -233,6 +252,26 @@ act4-build:
 
 act4-run: act4-build
 	$(PYTHON) "$(PROJECT_DIR)/compliance/run_act4.py"
+
+cbp-build:
+	@test -f "$(CBP_FRAMEWORK_DIR)/cbp.h" || \
+		(echo "CBP2025 framework missing at $(CBP_FRAMEWORK_DIR)" && exit 2)
+	mkdir -p "$(CBP_BUILD_DIR)"
+	$(MAKE) -C "$(CBP_FRAMEWORK_DIR)/lib"
+	cd "$(PROJECT_DIR)" && \
+	$(VERILATOR) $(VERILATOR_FLAGS) --cc -f "$(CBP_FILELIST)" \
+		--top-module CbpRtlPredictor \
+		--exe "$(VERIFICATION_DIR)/perf/cbp/cbp_rtl_interface.cc" \
+		-CFLAGS "-std=c++17 -I$(CBP_FRAMEWORK_DIR) -I$(CBP_FRAMEWORK_DIR)/lib" \
+		-LDFLAGS "-L$(CBP_FRAMEWORK_DIR)/lib -lcbp -lz" \
+		--Mdir "$(CBP_BUILD_DIR)" --build -j 0
+
+cbp-run: cbp-build
+	@test -f "$(CBP_TRACE)" || \
+		(echo "CBP trace missing at $(CBP_TRACE)" && exit 2)
+	"$(CBP_BUILD_DIR)/VCbpRtlPredictor" "$(CBP_TRACE)"
+
+cbp-sample: cbp-run
 
 build:
 	mkdir -p "$(TOP_BUILD_DIR)" "$(TRACE_DIR)"

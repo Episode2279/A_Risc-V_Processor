@@ -346,6 +346,14 @@ int main(int argc, char** argv) {
   uint64_t sc_overrides = 0;
   uint64_t sc_corrections = 0;
   uint64_t sc_harms = 0;
+  uint64_t sc_family_correct_support[5] = {0, 0, 0, 0, 0};
+  uint64_t sc_family_harm_support[5] = {0, 0, 0, 0, 0};
+  uint64_t loop_hits = 0;
+  uint64_t loop_confident = 0;
+  uint64_t loop_overrides = 0;
+  uint64_t loop_corrections = 0;
+  uint64_t loop_harms = 0;
+  uint64_t loop_trip_mismatches = 0;
   uint32_t tohost = 0;
   bool timed_out = true;
 
@@ -356,6 +364,19 @@ int main(int argc, char** argv) {
     sc_overrides += (uint64_t)topCPU->dbg_scOverrideEvent;
     sc_corrections += (uint64_t)topCPU->dbg_scCorrectEvent;
     sc_harms += (uint64_t)topCPU->dbg_scHarmEvent;
+    for (unsigned family = 0; family < 5; ++family) {
+      sc_family_correct_support[family] +=
+          (uint64_t)((topCPU->dbg_scFamilyCorrectSupport >> family) & 1U);
+      sc_family_harm_support[family] +=
+          (uint64_t)((topCPU->dbg_scFamilyHarmSupport >> family) & 1U);
+    }
+    loop_hits += (uint64_t)topCPU->dbg_loopHitEvent;
+    loop_confident += (uint64_t)topCPU->dbg_loopConfidentEvent;
+    loop_overrides += (uint64_t)topCPU->dbg_loopOverrideEvent;
+    loop_corrections += (uint64_t)topCPU->dbg_loopCorrectEvent;
+    loop_harms += (uint64_t)topCPU->dbg_loopHarmEvent;
+    loop_trip_mismatches +=
+        (uint64_t)topCPU->dbg_loopTripMismatchEvent;
     if (branch_trace_file != NULL && topCPU->dbg_branchTrainValid) {
       fprintf(branch_trace_file,
               "%08x,%016llx,%04x,%u,%u,%u,%u,%u\n",
@@ -493,6 +514,27 @@ int main(int argc, char** argv) {
            (unsigned long long)sc_corrections,
            (unsigned long long)sc_harms,
            (long long)sc_corrections - (long long)sc_harms);
+  static const char* kScFamilyNames[5] = {
+      "bias", "global", "local", "imli", "path"};
+  for (unsigned family = 0; family < 5; ++family) {
+    log_both(log_file,
+             "SC_FAMILY %s correction_support=%llu harm_support=%llu net=%lld\n",
+             kScFamilyNames[family],
+             (unsigned long long)sc_family_correct_support[family],
+             (unsigned long long)sc_family_harm_support[family],
+             (long long)sc_family_correct_support[family] -
+                 (long long)sc_family_harm_support[family]);
+  }
+  log_both(log_file,
+           "LOOP hits=%llu confident=%llu overrides=%llu corrections=%llu "
+           "harms=%llu net=%lld trip_mismatch=%llu\n",
+           (unsigned long long)loop_hits,
+           (unsigned long long)loop_confident,
+           (unsigned long long)loop_overrides,
+           (unsigned long long)loop_corrections,
+           (unsigned long long)loop_harms,
+           (long long)loop_corrections - (long long)loop_harms,
+           (unsigned long long)loop_trip_mismatches);
 
   int exit_code = 0;
   if (timed_out) {

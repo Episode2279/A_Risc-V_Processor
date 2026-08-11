@@ -22,11 +22,13 @@ tests; its configuration and runner live under `compliance/`.
 The unified scheduler can issue two integer operations or pair one integer with
 a branch/CSR/memory operation. It keeps a blocked memory candidate in the IQ
 and may fill both integer paths with ready work; the single shared LSU still
-accepts at most one memory operation per cycle. The front end uses a five-table TAGE predictor
+accepts at most one memory operation per cycle. The front end uses an eight-table TAGE predictor
 with incremental folded direction history, independently hashed speculative
 Path History, synchronous banked Tag RAM, and grouped pseudorandom allocation
-over a GShare base/alternate. A compact statistical corrector combines one
-PC-bias table with four GEHL components before the final direction is selected;
+over a 1,024-entry PC-indexed Bimodal base/alternate. A TAGE-SC-L-style
+statistical corrector combines Multi-Bias, six Global GEHL, four Local GEHL,
+three IMLI GEHL, and three Path GEHL components before the final direction is
+selected;
 target prediction uses a two-way BTB and a RAS. Predictor histories recover
 precisely from ROB-tagged checkpoints. Loads can pass known non-aliasing Stores
 and receive forwarding from older uncommitted Stores in the LSQ. Stores become
@@ -54,9 +56,11 @@ wrong-path responses safely. The D-cache remains write-through/no-write-allocate
 UART/host MMIO bypasses it. Both backing memories use registered synchronous
 reads rather than combinational array reads.
 
-Under the project's CBP-style accounting, the logical conditional-direction
-predictor state is 32,553 bits (4,069.125 bytes), 215 bits below the 4 KiB
-limit. This is not the synthesized physical-memory total: dual-lane table
+Under the project's CBP-style accounting, the enlarged experimental
+TAGE+Bimodal+Loop+SC conditional-direction predictor uses 130,483 bits
+(16,310.375 bytes, about 15.928 KiB), and is checked against a 16 KiB
+comparison limit. This is not
+the synthesized physical-memory total: dual-lane table
 copies, multiport banking/replication, recovery checkpoints, update metadata,
 BTB, and RAS remain real hardware outside that logical-capacity count. See
 `SPEC.md` and `rtl/frontend/bpu/README.md` for the itemized budget.
@@ -64,6 +68,15 @@ BTB, and RAS remain real hardware outside that logical-capacity count. See
 The project includes a Verilator simulation flow, a Vivado-oriented SystemVerilog
 testbench, CoreMark bare-metal software, memory-image generation, UART MMIO
 console output, and `tohost` pass/fail reporting.
+
+An optional CBP2025 performance adapter under `verification/perf/cbp/` connects
+the production Bimodal+TAGE+Loop+SC RTL to the official trace-driven simulator.
+With the ignored official framework and trace installed under
+`third_party/cbp2025/`, run `make cbp-sample` or
+`make cbp-run CBP_TRACE=/path/to/trace.gz`. The current 997,301-instruction
+official integer sample measures 298 conditional misses and 0.2988 BrMisPKI;
+see `verification/perf/cbp/README.md` for the interface semantics and the
+64 KiB official-reference comparison.
 
 ## Requirements
 
@@ -122,7 +135,7 @@ success.
 make help            # Show available targets
 make coremark        # Rebuild CoreMark ELF and memory images only
 make lint            # Verilator lint for RTL plus SV testbench
-make bpu-smoke       # Test GShare/BTB behavior
+make bpu-smoke       # Test Bimodal/BTB behavior
 make tage-smoke      # Test TAGE folds, hashes, tables, and history recovery
 make tage-update-smoke # Test the retirement-training FIFO and backpressure
 make sc-smoke        # Test statistical-corrector timing/training/forwarding

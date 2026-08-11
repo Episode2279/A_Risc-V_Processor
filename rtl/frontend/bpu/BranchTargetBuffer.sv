@@ -8,6 +8,7 @@ module BranchTargetBuffer import TypesPkg::*; #(
  input instruction_addr_t hintPc_i,hintPc1_i,
  output logic hintConditional_o,hintControl_o,
  output logic hintConditional1_o,hintControl1_o,
+ output instruction_addr_t hintTarget_o,hintTarget1_o,
  input logic updateValid_i, input instruction_addr_t updatePc_i,
  input logic updateIsConditional_i,input logic updateTaken_i,
  input instruction_addr_t updateTarget_i);
@@ -30,14 +31,17 @@ module BranchTargetBuffer import TypesPkg::*; #(
   hit_o=1'b0; target_o='0; hit1_o=1'b0; target1_o='0;
   hintConditional_o=1'b0; hintControl_o=1'b0;
   hintConditional1_o=1'b0; hintControl1_o=1'b0;
+  hintTarget_o='0; hintTarget1_o='0;
   for(combWay=0;combWay<WAYS;combWay=combWay+1) begin
    if(validTable[qSet][combWay]&&(tagTable[qSet][combWay]==qTag)) begin hit_o=1'b1; target_o=targetTable[qSet][combWay]; end
    if(validTable[qSet1][combWay]&&(tagTable[qSet1][combWay]==qTag1)) begin hit1_o=1'b1; target1_o=targetTable[qSet1][combWay]; end
    if(validTable[hSet][combWay]&&(tagTable[hSet][combWay]==hTag)) begin
-    hintControl_o=1'b1; hintConditional_o=conditionalTable[hSet][combWay];
+   hintControl_o=1'b1; hintConditional_o=conditionalTable[hSet][combWay];
+    hintTarget_o=targetTable[hSet][combWay];
    end
    if(validTable[hSet1][combWay]&&(tagTable[hSet1][combWay]==hTag1)) begin
-    hintControl1_o=1'b1; hintConditional1_o=conditionalTable[hSet1][combWay];
+   hintControl1_o=1'b1; hintConditional1_o=conditionalTable[hSet1][combWay];
+    hintTarget1_o=targetTable[hSet1][combWay];
    end
   end
   updateHit0=validTable[uSet][0]&&(tagTable[uSet][0]==uTag);

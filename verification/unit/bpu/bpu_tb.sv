@@ -62,6 +62,7 @@ module bpu_tb;
         .updateTageMeta_i('0),
         .updateReady_o(),
         .resolveValid_i(1'b0), .resolvePc_i('0),
+        .resolveTarget_i('0),
         .resolveIsConditional_i(1'b0), .resolveTaken_i(1'b0),
         .resolveMispredicted_i(1'b0), .resolveIsCall_i(1'b0),
         .resolveIsReturn_i(1'b0), .resolveRobTag_i('0),
@@ -69,7 +70,9 @@ module bpu_tb;
         .checkpointAllocTag_i('{default:'0}),
         .checkpointAllocHistory_i('{default:'0}),
         .checkpointAllocTageHistory_i('{default:'0}),
-        .checkpointAllocTagePathHistory_i('{default:'0})
+        .checkpointAllocTagePathHistory_i('{default:'0}),
+        .checkpointAllocLoopMeta_i('{default:'0}),
+        .checkpointAllocScImli_i('{default:'0})
     );
 
     task automatic tick;
@@ -128,8 +131,7 @@ module bpu_tb;
         if (predictTaken) $fatal(1, "BPU predicted after reset");
         query(32'h100, BEQ_INSN);
 
-        // A non-speculative unit-test update trains PHT[0x40] without
-        // fabricating a GHR advance; real fetches use queryAdvance.
+        // Train the PC-indexed Bimodal entry for 0x100.
         update(32'h100, 1'b1, 1'b1, 32'h180, predictorIndex);
 
         // PC 0x104 therefore selects its own initially weak-not-taken entry.
@@ -138,15 +140,15 @@ module bpu_tb;
         query(32'h104, BEQ_INSN);
         if (predictTaken || predictTarget != 32'h1a0 ||
             predictorIndex != bpu_index_t'(10'h041))
-            $fatal(1, "GShare lookup or BTB target lookup failed");
+            $fatal(1, "Bimodal lookup or BTB target lookup failed");
 
-        // Train that entry not-taken; GHR remains owned by speculation.
+        // Train that entry not-taken.
         update(32'h104, 1'b1, 1'b0, 32'h108, predictorIndex);
         query(32'h108, JAL_INSN);
         update(32'h108, 1'b0, 1'b1, 32'h1c0, predictorIndex);
         query(32'h108, BEQ_INSN);
         if (predictTaken || predictorIndex != bpu_index_t'(10'h042))
-            $fatal(1, "GShare not-taken counter update failed");
+            $fatal(1, "Bimodal not-taken counter update failed");
 
         // Direct JAL targets are decoded without waiting for a BTB fill.
         query(32'h200, JAL_INSN);
@@ -161,7 +163,7 @@ module bpu_tb;
         if (!predictTaken || predictTarget != 32'h200)
             $fatal(1, "not-taken update incorrectly invalidated BTB");
 
-        $display("GShare base BPU + BTB smoke test: PASS");
+        $display("Bimodal base BPU + BTB smoke test: PASS");
         $finish;
     end
 

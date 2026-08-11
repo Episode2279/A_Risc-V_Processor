@@ -30,33 +30,108 @@ package TypesPkg;
     parameter int UNIFIED_IQ_ENTRY_NUM = 16;
     parameter int LSQ_ENTRY_NUM = 16;
     parameter int STORE_BUFFER_ENTRY_NUM = 8;
-    // A 1K-entry PHT materially reduces destructive aliasing in CoreMark while
-    // remaining small compared with the ROB/PRF state in this educational core.
-    parameter int BPU_HISTORY_WIDTH = 10;
-    // TAGE uses a longer speculative history without changing the 1K-entry
-    // GShare base-predictor index.
-    parameter int TAGE_HISTORY_WIDTH = 64;
+    // Index width for the 1K-entry PC-indexed Bimodal base predictor.
+    parameter int BPU_BASE_INDEX_WIDTH = 10;
+    // Compatibility width for the existing packet/checkpoint ports.  Bimodal
+    // drives their history snapshots to zero and owns no GHR.
+    parameter int BPU_HISTORY_WIDTH = BPU_BASE_INDEX_WIDTH;
+    // TAGE owns the speculative global direction history; the Bimodal base has
+    // no history register.
+    parameter int TAGE_HISTORY_WIDTH = 192;
     // A compact speculative signature of the recent control-flow path.  It is
     // kept separate from the direction GHR so identical Taken/Not-taken
     // sequences reached through different static branches can hash apart.
     parameter int TAGE_PATH_HISTORY_WIDTH = 16;
-    parameter int TAGE_TABLE_NUM = 5;
-    parameter int TAGE_TABLE_ENTRIES = 256;
+    parameter int TAGE_TABLE_NUM = 8;
+    parameter int TAGE_TABLE_ENTRIES = 512;
     // Entry generations revalidate a prediction-time Provider after queued
     // retirement training.  Five bits provide 32 distinct versions, exceeding
     // the current ROB/front-end bound on simultaneously live replacements.
     parameter int TAGE_GENERATION_WIDTH = 5;
-    // CBP-style logical predictor-state accounting.  This deliberately counts
-    // each logical prediction table once; physical multi-port replication and
-    // pipeline/ROB metadata are implementation costs, not extra logical
-    // predictor entries.  The default configuration must stay within 4 KiB.
-    parameter int BPU_CBP_STORAGE_LIMIT_BITS = 4 * 1024 * 8;
-    parameter int BPU_TAGE_GSHARE_STORAGE_BITS = 27917;
-    parameter int BPU_SC_STORAGE_BITS = 4608;
-    // Four 7-bit incrementally maintained H=3/7/15/31 folds feed the SC.
-    parameter int BPU_SC_FOLD_STORAGE_BITS = 4 * 7;
+    parameter int LOOP_TABLE_ENTRIES = 64;
+    parameter int LOOP_TAG_WIDTH = 12;
+    parameter int LOOP_ITER_WIDTH = 10;
+    parameter int LOOP_CONFIDENCE_WIDTH = 3;
+    parameter int LOOP_AGE_WIDTH = 2;
+    parameter int LOOP_GENERATION_WIDTH = 4;
+    parameter int LOOP_ACTION_DEPTH = 32;
+    // TAGE-SC-L-style Statistical Corrector geometry.  Global GEHL follows the
+    // direction GHR, Local GEHL follows a per-PC history, and IMLI GEHL sees
+    // the speculative innermost-loop iteration count.  Dedicated Path GEHL
+    // and a second independently indexed Bias table replace correlated
+    // Global/IMLI capacity without increasing the signed-counter budget.
+    parameter int SC_COUNTER_WIDTH = 6;
+    parameter int SC_BIAS_TABLE_NUM = 2;
+    parameter int SC_BIAS_TABLE_ENTRIES = 256;
+    parameter int SC_GLOBAL_GEHL_TABLE_NUM = 6;
+    parameter int SC_GLOBAL_GEHL_TABLE_ENTRIES = 256;
+    parameter int SC_LOCAL_HISTORY_ENTRIES = 256;
+    parameter int SC_LOCAL_HISTORY_WIDTH = 12;
+    parameter int SC_LOCAL_GEHL_TABLE_NUM = 4;
+    parameter int SC_LOCAL_GEHL_TABLE_ENTRIES = 512;
+    parameter int SC_IMLI_WIDTH = 10;
+    parameter int SC_IMLI_GEHL_TABLE_NUM = 3;
+    parameter int SC_IMLI_GEHL_TABLE_ENTRIES = 256;
+    parameter int SC_PATH_GEHL_TABLE_NUM = 3;
+    parameter int SC_PATH_GEHL_TABLE_ENTRIES = 256;
+    parameter int SC_THRESHOLD_TABLE_ENTRIES = 32;
+    parameter int SC_THRESHOLD_COUNTER_WIDTH = 6;
+    parameter int SC_SCORE_WIDTH = 12;
+    parameter int SC_FEATURE_FAMILY_NUM = 5;
+    // CBP-style logical predictor-state accounting.  This configuration is
+    // deliberately bounded by a 16 KiB design point.
+    parameter int BPU_CBP_STORAGE_LIMIT_BITS = 16 * 1024 * 8;
+    parameter bit BPU_ENFORCE_CBP_STORAGE_LIMIT = 1'b1;
+    // The current eight-table tag schedule is 7/8/9/10/11/12/13/14 bits.
+    // Derive the
+    // logical budget from geometry so another entry-count experiment cannot
+    // leave a stale hand-written capacity constant behind.
+    parameter int BPU_BIMODAL_STORAGE_BITS =
+        (1 << BPU_BASE_INDEX_WIDTH) * 2;
+    parameter int BPU_TAGE_TAG_STORAGE_BITS =
+        TAGE_TABLE_ENTRIES * (7 + 8 + 9 + 10 + 11 + 12 + 13 + 14);
+    parameter int BPU_TAGE_AUX_STORAGE_BITS =
+        TAGE_TABLE_NUM * TAGE_TABLE_ENTRIES *
+        (1 + 3 + 2 + TAGE_GENERATION_WIDTH);
+    parameter int BPU_TAGE_FOLD_STORAGE_BITS =
+        TAGE_TABLE_NUM * $clog2(TAGE_TABLE_ENTRIES) +
+        (7 + 8 + 9 + 10 + 11 + 12 + 13 + 14) +
+        (6 + 7 + 8 + 9 + 10 + 11 + 12 + 13);
+    parameter int BPU_TAGE_CONTROL_STORAGE_BITS =
+        TAGE_HISTORY_WIDTH + TAGE_PATH_HISTORY_WIDTH +
+        BPU_TAGE_FOLD_STORAGE_BITS +
+        (8 * 4) + (4 * 2) + 8 + 8 + $clog2(TAGE_TABLE_ENTRIES);
+    parameter int BPU_TAGE_BIMODAL_STORAGE_BITS =
+        BPU_BIMODAL_STORAGE_BITS + BPU_TAGE_TAG_STORAGE_BITS +
+        BPU_TAGE_AUX_STORAGE_BITS + BPU_TAGE_CONTROL_STORAGE_BITS;
+    parameter int BPU_LOOP_STORAGE_BITS =
+        LOOP_TABLE_ENTRIES *
+        (1 + LOOP_TAG_WIDTH + LOOP_ITER_WIDTH + LOOP_ITER_WIDTH +
+         LOOP_CONFIDENCE_WIDTH + LOOP_AGE_WIDTH + 1 +
+         LOOP_GENERATION_WIDTH);
+    parameter int BPU_SC_COUNTER_STORAGE_BITS =
+        (SC_BIAS_TABLE_NUM * SC_BIAS_TABLE_ENTRIES * SC_COUNTER_WIDTH) +
+        (SC_GLOBAL_GEHL_TABLE_NUM * SC_GLOBAL_GEHL_TABLE_ENTRIES *
+         SC_COUNTER_WIDTH) +
+        (SC_LOCAL_GEHL_TABLE_NUM * SC_LOCAL_GEHL_TABLE_ENTRIES *
+         SC_COUNTER_WIDTH) +
+        (SC_IMLI_GEHL_TABLE_NUM * SC_IMLI_GEHL_TABLE_ENTRIES *
+         SC_COUNTER_WIDTH) +
+        (SC_PATH_GEHL_TABLE_NUM * SC_PATH_GEHL_TABLE_ENTRIES *
+         SC_COUNTER_WIDTH);
+    parameter int BPU_SC_AUX_STORAGE_BITS =
+        (SC_LOCAL_HISTORY_ENTRIES * SC_LOCAL_HISTORY_WIDTH) +
+        (SC_THRESHOLD_TABLE_ENTRIES * SC_THRESHOLD_COUNTER_WIDTH) +
+        SC_IMLI_WIDTH;
+    parameter int BPU_SC_STORAGE_BITS =
+        BPU_SC_COUNTER_STORAGE_BITS + BPU_SC_AUX_STORAGE_BITS;
+    // Eight 8-bit incrementally maintained global-history folds feed SC.
+    parameter int BPU_SC_FOLD_STORAGE_BITS =
+        SC_GLOBAL_GEHL_TABLE_NUM *
+        $clog2(SC_GLOBAL_GEHL_TABLE_ENTRIES);
     parameter int BPU_TOTAL_STORAGE_BITS =
-        BPU_TAGE_GSHARE_STORAGE_BITS + BPU_SC_STORAGE_BITS +
+        BPU_TAGE_BIMODAL_STORAGE_BITS + BPU_SC_STORAGE_BITS +
+        BPU_LOOP_STORAGE_BITS +
         BPU_SC_FOLD_STORAGE_BITS;
 
     // Derived address widths used by memory index signals inside the design.
@@ -76,13 +151,35 @@ package TypesPkg;
     typedef logic [PHYS_REG_ADDR-1:0] phys_reg_addr_t;
     typedef logic [ROB_INDEX-1:0] rob_tag_t;
     typedef logic [LSQ_INDEX-1:0] lsq_tag_t;
-    typedef logic [BPU_HISTORY_WIDTH-1:0] bpu_index_t;
+    typedef logic [BPU_BASE_INDEX_WIDTH-1:0] bpu_index_t;
     typedef logic [TAGE_HISTORY_WIDTH-1:0] tage_history_t;
     typedef logic [TAGE_PATH_HISTORY_WIDTH-1:0] tage_path_history_t;
     typedef logic [TAGE_GENERATION_WIDTH-1:0] tage_generation_t;
     typedef logic [$clog2(TAGE_TABLE_NUM)-1:0] tage_provider_t;
+    typedef logic [$clog2(LOOP_TABLE_ENTRIES)-1:0] loop_index_t;
+    typedef logic [LOOP_TAG_WIDTH-1:0] loop_tag_t;
+    typedef logic [LOOP_ITER_WIDTH-1:0] loop_iter_t;
+    typedef logic [LOOP_GENERATION_WIDTH-1:0] loop_generation_t;
+    typedef logic [$clog2(LOOP_ACTION_DEPTH)-1:0] loop_action_ptr_t;
+    typedef logic [SC_LOCAL_HISTORY_WIDTH-1:0] sc_local_history_t;
+    typedef logic [SC_IMLI_WIDTH-1:0] sc_imli_t;
+    typedef logic signed [SC_SCORE_WIDTH-1:0] sc_score_t;
     // Program counter and instruction addresses use full datapath width.
     typedef word_t instruction_addr_t;
+
+    typedef struct packed {
+        logic             hit;
+        logic             confident;
+        logic             prediction;
+        logic             used;
+        loop_index_t      tableIndex;
+        loop_tag_t        tag;
+        loop_generation_t generation;
+        loop_iter_t       iterationBefore;
+        loop_iter_t       tripCount;
+        logic             direction;
+        loop_action_ptr_t checkpointTail;
+    } loop_meta_t;
 
     // Prediction-time metadata retained until a control-flow instruction retires.
     // Index/tag values are recomputed from pc+history at commit so table
@@ -99,9 +196,18 @@ package TypesPkg;
         // allocation and provider training use this value so an SC correction
         // cannot hide a residual TAGE miss.
         logic           tagePrediction;
+        // Direction after the optional Loop Predictor but before SC.  Keeping
+        // this separately makes Loop and SC attribution unambiguous.
+        logic           preScPrediction;
         logic           finalPrediction;
         logic           providerWeak;
+        sc_local_history_t scLocalHistory;
+        sc_imli_t       scImli;
+        sc_score_t      scScore;
+        logic [SC_FEATURE_FAMILY_NUM-1:0] scFamilyTaken;
+        logic [SC_FEATURE_FAMILY_NUM-1:0] scFamilyValid;
         logic           scLowConfidence;
+        loop_meta_t     loop;
     } tage_meta_t;
 
     // Stored representation used by the decoupled front-end fetch queue.
