@@ -1,4 +1,4 @@
-# Project-level Verilator/CoreMark/Vivado flow.
+# Project-level Verilator/CoreMark flow.
 # Run from WSL/Linux in this directory:
 #   make sim
 #   make clean
@@ -36,8 +36,6 @@ VERILATOR ?= verilator
 VERILATOR_FLAGS ?= -sv --timing -Wno-TIMESCALEMOD
 VERILATOR_BUILD_FLAGS ?= --trace
 TOP_PARAM_FLAGS ?=
-VIVADO ?= vivado
-FPGA_PART ?=
 
 RISCV_PREFIX ?= riscv64-unknown-elf-
 RISCV_GCC ?= $(RISCV_PREFIX)gcc
@@ -59,7 +57,7 @@ endif
 	lsu-pending-smoke ooo-smoke ooo-backend-smoke rv32i-compliance-smoke \
 	act4-build act4-run cbp-build cbp-run cbp-sample build run \
 	kanata kanata-legacy konata csr-smoke \
-	vivado-project vivado-sim vivado-synth clean clean-cache clean-verilator clean-logs \
+	clean clean-cache clean-verilator clean-logs \
 	clean-coremark clean-compliance clean-temporary clean-generated clean-all
 
 all: sim
@@ -93,9 +91,6 @@ help:
 	@printf "  make kanata           Convert the V2 OoO dump to a Kanata trace\n"
 	@printf "  make kanata-legacy    Run the previous compatibility converter\n"
 	@printf "  make konata           Compatibility alias for make kanata\n"
-	@printf "  make vivado-project FPGA_PART=<part>  Create build/vivado project\n"
-	@printf "  make vivado-sim FPGA_PART=<part>      Run the XSim integration testbench\n"
-	@printf "  make vivado-synth FPGA_PART=<part>    Run Vivado synthesis\n"
 	@printf "  make csr-smoke        Run a small CSR instruction/counter smoke test\n"
 	@printf "  make clean            Remove generated Verilator and trace products\n"
 	@printf "  make clean-generated  Remove all reproducible build/test products\n"
@@ -103,7 +98,6 @@ help:
 	@printf "  MAX_CYCLES=10000000   Runtime cycle cap\n"
 	@printf "  TRACE=1               Generate build/traces/wave.vcd\n"
 	@printf "  PIPE_DUMP=0           Disable build/traces/topCPU_tb_output.txt\n"
-	@printf "  FPGA_PART=...         Required Vivado target part, e.g. xc7a35tcpg236-1\n"
 
 sim: coremark lint build run
 
@@ -316,21 +310,6 @@ csr-smoke: build
 	cd "$(PROJECT_DIR)" && $(MAKE) --no-print-directory coremark >/dev/null; \
 	exit $$status
 
-vivado-project:
-	@test -n "$(FPGA_PART)" || (echo "FPGA_PART is required" && exit 2)
-	$(VIVADO) -mode batch -source "$(PROJECT_DIR)/fpga/vivado/scripts/create_project.tcl" \
-		-tclargs "$(FPGA_PART)"
-
-vivado-sim: coremark
-	@test -n "$(FPGA_PART)" || (echo "FPGA_PART is required" && exit 2)
-	$(VIVADO) -mode batch -source "$(PROJECT_DIR)/fpga/vivado/scripts/run_simulation.tcl" \
-		-tclargs "$(FPGA_PART)"
-
-vivado-synth:
-	@test -n "$(FPGA_PART)" || (echo "FPGA_PART is required" && exit 2)
-	$(VIVADO) -mode batch -source "$(PROJECT_DIR)/fpga/vivado/scripts/run_synthesis.tcl" \
-		-tclargs "$(FPGA_PART)"
-
 clean: clean-verilator clean-logs
 
 clean-cache:
@@ -357,6 +336,6 @@ clean-temporary:
 	rm -f "$(BUILD_DIR)"/core "$(BUILD_DIR)"/core.*
 
 clean-generated: clean clean-coremark clean-compliance clean-temporary
-	rm -rf "$(IMAGE_DIR)" "$(BUILD_DIR)/vivado"
+	rm -rf "$(IMAGE_DIR)"
 
 clean-all: clean-generated

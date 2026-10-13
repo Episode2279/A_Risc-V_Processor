@@ -65,7 +65,7 @@ copies, multiport banking/replication, recovery checkpoints, update metadata,
 BTB, and RAS remain real hardware outside that logical-capacity count. See
 `SPEC.md` and `rtl/frontend/bpu/README.md` for the itemized budget.
 
-The project includes a Verilator simulation flow, a Vivado-oriented SystemVerilog
+The project includes a Verilator simulation flow, a shared SystemVerilog
 testbench, CoreMark bare-metal software, memory-image generation, UART MMIO
 console output, and `tohost` pass/fail reporting.
 
@@ -153,9 +153,6 @@ make csr-smoke       # Run a small CSR instruction/counter smoke test
 make clean           # Remove Verilator outputs, waves, and sim logs
 make clean-coremark  # Remove generated CoreMark ELF/bin/map/images
 make clean-all       # clean + clean-coremark
-make vivado-project FPGA_PART=<part> # Recreate a Vivado project under build/
-make vivado-sim FPGA_PART=<part>     # Run the shared testbench with XSim
-make vivado-synth FPGA_PART=<part>   # Synthesize and write reports under build/
 ```
 
 Runtime options:
@@ -210,9 +207,9 @@ make csr-smoke
 The smoke test temporarily loads `test/csr_smoke.S`, verifies CSR read/write and
 `cycle`, then restores the default CoreMark memory images.
 
-## Vivado Testbench
+## RTL Integration Testbench
 
-The shared Vivado/RTL integration testbench is:
+The shared RTL integration testbench is:
 
 ```text
 verification/integration/core/topCPU_tb.sv
@@ -228,11 +225,6 @@ The structured dump can be converted to Konata format with:
 ```sh
 make kanata
 ```
-
-Portable Vivado Tcl and XDC inputs live under `fpga/vivado/`; generated `.xpr`,
-`.runs`, `.cache`, reports, and IP output products live under `build/vivado/`.
-The FPGA part is always supplied explicitly rather than embedding a developer's
-board choice into the CPU RTL.
 
 ## Source Layout
 
@@ -250,7 +242,6 @@ or "stage" buckets:
 - `verification/{unit,integration}`: testbenches separated from synthesizable RTL
 - `sim/verilator`: Verilator C++ harness
 - `tools/kanata`: pipeline-dump conversion tools
-- `fpga/vivado`: checked-in Tcl/XDC inputs; generated products go to `build/`
 - `coremark`, `test`, `compliance`: software workloads and ISA validation
 
 ## Notes

@@ -11,7 +11,7 @@ fpga/boards/<board>/
 
 `BoardTop.sv` adapts the portable `topCPU` ports to the board oscillator, reset,
 UART, LEDs, and any host interface. Board clock-generation IP and its generated
-products must remain under `build/vivado/`; only reproducible configuration or
+products must remain under `build/`; only reproducible configuration or
 Tcl used to recreate the IP belongs in this tree.
 
 No board is selected yet. This is intentional: choosing a part number does not
