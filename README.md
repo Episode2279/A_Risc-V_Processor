@@ -1,255 +1,136 @@
 # A_Risc-V_Processor
 
-PRF-based, out-of-order RV32I-style RISC-V processor written in SystemVerilog.
+A two-wide, out-of-order RV32I processor written in SystemVerilog and
+simulated with Verilator. It uses a physical register file (PRF), a reorder
+buffer (ROB), and in-order retirement with precise traps.
 
-`topCPU` now uses the out-of-order architecture as its only executable core:
-dual fetch/decode feeds register rename, a unified dual-issue queue, physical
-register file, reorder buffer, load/store queue, execution, and in-order retirement.
-The former sequential execute/memory/writeback pipeline has been removed.
+## Features
 
-An eight-entry, two-wide Fetch Queue decouples the synchronous I-cache/BPU F1
-response from decode. The unified IQ and LSQ are independently sized at 16
-entries each. Stores may generate their address before their data is ready;
-the LSQ retains the Store-data physical tag and captures a later PRF writeback.
+- **Out-of-order core**: two instructions per cycle through fetch, decode,
+  rename, issue, and retirement. 16-entry ROB, 48 physical registers, 16-entry
+  unified issue queue, and 16-entry load/store queue (LSQ).
+- **Branch prediction**: eight-table TAGE over a Bimodal base, a loop
+  predictor, and a TAGE-SC-L-style statistical corrector within a 16 KiB
+  logical budget, plus a 128-entry BTB and an 8-entry return-address stack.
+  Several branches may be unresolved at once; a misprediction restores state
+  from that branch's checkpoint.
+- **Memory**: 4 KiB I-cache; 1 KiB D-cache with one MSHR, critical-word-first
+  refill, and hit-under-miss; store-to-load forwarding in the LSQ; 8-entry
+  Store Buffer for retired Stores.
+- **ISA**: RV32I, Zicsr, and a machine-mode trap subset (ECALL, EBREAK, MRET,
+  illegal-instruction and misalignment traps). No M/A/C extensions and no
+  interrupts.
 
-The RV32I path now performs strict illegal-instruction decoding, serializes
-FENCE, and takes precise ROB-head traps for ECALL, EBREAK, instruction-address
-misalignment, and load/store-address misalignment. Basic machine trap entry and
-MRET are implemented. Run `make rv32i-compliance-smoke` for the directed suite.
-The official ACT4 RV32I I-extension suite passes all 39 generated self-checking
-tests; its configuration and runner live under `compliance/`.
-
-The unified scheduler can issue two integer operations or pair one integer with
-a branch/CSR/memory operation. It keeps a blocked memory candidate in the IQ
-and may fill both integer paths with ready work; the single shared LSU still
-accepts at most one memory operation per cycle. The front end uses an eight-table TAGE predictor
-with incremental folded direction history, independently hashed speculative
-Path History, synchronous banked Tag RAM, and grouped pseudorandom allocation
-over a 1,024-entry PC-indexed Bimodal base/alternate. A TAGE-SC-L-style
-statistical corrector combines Multi-Bias, six Global GEHL, four Local GEHL,
-three IMLI GEHL, and three Path GEHL components before the final direction is
-selected;
-target prediction uses a two-way BTB and a RAS. Predictor histories recover
-precisely from ROB-tagged checkpoints. Loads can pass known non-aliasing Stores
-and receive forwarding from older uncommitted Stores in the LSQ. Stores become
-eligible to reach memory only after ROB retirement and may drain later from the
-committed Store Buffer. A Load disjoint from that buffer may pass it, while any
-overlap waits for the matching committed Store to drain. Multiple branches may
-remain unresolved and execute out of order; CSR/FENCE/trap-class operations
-retain the serialized path.
-See `rtl/backend/docs/OoO.md` for implemented invariants and remaining
-performance work.
-
-The F0 front-end request sends `PC`/`PC+4` to the BPU and a 4 KiB synchronous
-I-cache in parallel; the aligned instructions and prediction metadata return in
-F1. The direct-mapped I-cache has 256 sets, 16-byte lines, dual-address lookup,
-and blocking four-word refills. The LSU connects to a 1 KiB, 64-set,
-direct-mapped synchronous D-cache with 16-byte lines. Its elastic hit pipeline
-accepts one cached Load per cycle, while a tagged single MSHR provides
-critical-word-first, early restart, and different-set hit-under-miss. An
-eight-entry Store Buffer decouples committed Stores. Its byte-merge query logic
-is retained and tested, but the backend currently uses a correctness guard:
-disjoint Loads may pass, whereas any overlap waits instead of forwarding
-directly from this buffer. Non-forwarded Loads carry their ROB tag through the
-D-cache, so the LSU can retain multiple pending requests and discard recovered
-wrong-path responses safely. The D-cache remains write-through/no-write-allocate, and
-UART/host MMIO bypasses it. Both backing memories use registered synchronous
-reads rather than combinational array reads.
-
-Under the project's CBP-style accounting, the enlarged experimental
-TAGE+Bimodal+Loop+SC conditional-direction predictor uses 130,483 bits
-(16,310.375 bytes, about 15.928 KiB), and is checked against a 16 KiB
-comparison limit. This is not
-the synthesized physical-memory total: dual-lane table
-copies, multiport banking/replication, recovery checkpoints, update metadata,
-BTB, and RAS remain real hardware outside that logical-capacity count. See
-`SPEC.md` and `rtl/frontend/bpu/README.md` for the itemized budget.
-
-The project includes a Verilator simulation flow, a shared SystemVerilog
-testbench, CoreMark bare-metal software, memory-image generation, UART MMIO
-console output, and `tohost` pass/fail reporting.
-
-An optional CBP2025 performance adapter under `verification/perf/cbp/` connects
-the production Bimodal+TAGE+Loop+SC RTL to the official trace-driven simulator.
-With the ignored official framework and trace installed under
-`third_party/cbp2025/`, run `make cbp-sample` or
-`make cbp-run CBP_TRACE=/path/to/trace.gz`. The current 997,301-instruction
-official integer sample measures 298 conditional misses and 0.2988 BrMisPKI;
-see `verification/perf/cbp/README.md` for the interface semantics and the
-64 KiB official-reference comparison.
+The default `make sim` run (one CoreMark iteration) takes 580,436 cycles for
+859,534 instructions, an IPC of 1.48. See [SPEC.md](SPEC.md#current-performance).
 
 ## Requirements
 
-Run the command-line flow from WSL or Linux.
-
-Required tools:
-
-- `make`
-- `verilator`
-- `python3`
-- `riscv64-unknown-elf-gcc`
-- `riscv64-unknown-elf-objcopy`
-- `riscv64-unknown-elf-size`
-
-On Ubuntu/WSL, install the main tools with:
+Use Linux or WSL with `make`, `verilator` (tested with 5.020), `python3`, and
+the `riscv64-unknown-elf-` GCC toolchain:
 
 ```sh
 sudo apt update
 sudo apt install make verilator gcc-riscv64-unknown-elf python3
 ```
 
-## Quick Start
-
-From the project root:
+## Quick start
 
 ```sh
-cd A_Risc-V_Processor
 make sim
 ```
 
-`make sim` does the full verified flow:
-
-- Builds `coremark/coremark.elf`
-- Generates `build/images/insn.mem`
-- Generates `build/images/data.mem`
-- Runs Verilator lint
-- Builds `build/verilator/top/VtopCPU`
-- Runs the simulation until `tohost` or timeout
-
-The authoritative successful termination is:
+This builds CoreMark, writes `build/images/insn.mem` and `data.mem`, lints the
+RTL, builds the Verilator model, and runs it. A successful run ends with:
 
 ```text
-toHost=0x00000001
 ***** simulation result: SUCCESS *****
 ```
 
-With the default short one-iteration simulation, CoreMark may also print
-`Errors detected`. The expected CRCs are still produced; this message is its
-standard validation warning because the simulated run represents less than the
-required 10 seconds. It is not a CPU-functional failure when `tohost` reports
-success.
+Pass/fail is decided by the program's write to `tohost` (`0x0000FFF8`): 1 is
+pass, any other nonzero value is fail, and no write before `MAX_CYCLES` is a
+timeout. CoreMark also prints `Errors detected` because a simulated run is
+shorter than the 10 seconds it needs for a valid score; this is expected.
 
-## Useful Make Targets
-
-```sh
-make help            # Show available targets
-make coremark        # Rebuild CoreMark ELF and memory images only
-make lint            # Verilator lint for RTL plus SV testbench
-make bpu-smoke       # Test Bimodal/BTB behavior
-make tage-smoke      # Test TAGE folds, hashes, tables, and history recovery
-make tage-update-smoke # Test the retirement-training FIFO and backpressure
-make sc-smoke        # Test statistical-corrector timing/training/forwarding
-make icache-smoke    # Test I-cache hits, blocking refill, backpressure, and flush
-make dcache-smoke    # Test pipelined hits, early restart, hit-under-miss, and MMIO
-make cache-smoke     # Run both cache-directed smoke tests
-make store-buffer-smoke # Test committed Store FIFO and byte-merge query logic
-make lsu-pending-smoke # Test tagged/reordered Load responses and recovery draining
-make ooo-smoke       # Test RAT/PRF/ROB/IQ/LSQ structures
-make ooo-backend-smoke # Test OoO dispatch/execute/commit behavior
-make build           # Build the Verilated topCPU executable
-make run             # Run the existing Verilated executable
-make sim             # coremark + lint + build + run
-make csr-smoke       # Run a small CSR instruction/counter smoke test
-make clean           # Remove Verilator outputs, waves, and sim logs
-make clean-coremark  # Remove generated CoreMark ELF/bin/map/images
-make clean-all       # clean + clean-coremark
-```
-
-Runtime options:
+Common options:
 
 ```sh
-make run MAX_CYCLES=2000000
-make sim TRACE=1
-make sim MAX_CYCLES=2000000 TRACE=1
+make run MAX_CYCLES=2000000   # rerun the existing model with a cycle cap
+make sim TRACE=1              # also write build/traces/wave.vcd
+make sim PIPE_DUMP=0          # skip the pipeline dump for a faster run
 ```
 
-`TRACE=1` writes `build/traces/wave.vcd`.
+`ITERATIONS` in `coremark/core_portme.h` sets the CoreMark iteration count
+(default 1).
 
-## Simulation Output
+## Make targets
 
-CoreMark writes formatted messages through UART MMIO at `0x0000FFE0`.
-The Verilator harness mirrors UART bytes to the console and to
-`build/traces/simulation_output.txt`.
+`make help` lists every target. The main ones:
 
-The simulation result is decided by `tohost` at `0x0000FFF8`:
+| Target | Purpose |
+| --- | --- |
+| `sim` | `coremark` + `lint` + `build` + `run` |
+| `coremark`, `lint`, `build`, `run` | The individual steps of `sim` |
+| `csr-smoke` | Run `test/csr_smoke.S`, then restore the CoreMark images |
+| `kanata` | Convert the pipeline dump into a Kanata/Konata trace |
+| `clean`, `clean-generated` | Remove simulation outputs / all generated files |
 
-- `tohost == 1`: success
-- `tohost != 0 && tohost != 1`: failure
-- no nonzero `tohost` before `MAX_CYCLES`: timeout
+Unit tests (each builds its own small testbench):
 
-At shutdown, the harness also prints `CACHE I` and `CACHE D` diagnostic lines.
-They expose I-cache request, hit, line-miss, refill/stall, cross-line,
-backpressure, and MPKI data, plus D-cache Load/Store hit/miss, MMIO, busy,
-refill, request-backpressure, Store-commit-stall, Load miss-rate, and MPKI data.
-These counters are RTL debug outputs and are not software-visible CSRs.
+| Target | Covers |
+| --- | --- |
+| `fetch-queue-smoke` | Fetch Queue enqueue, dequeue, flush |
+| `bpu-smoke`, `loop-smoke`, `tage-smoke`, `tage-update-smoke`, `sc-smoke` | Bimodal/BTB, loop predictor, TAGE, TAGE update FIFO, statistical corrector |
+| `icache-smoke`, `dcache-smoke` (`cache-smoke` runs both) | Cache hits, refills, back-pressure, flush, MMIO |
+| `store-buffer-smoke`, `lsu-pending-smoke` | Store Buffer; out-of-order Load responses and wrong-path draining |
+| `ooo-smoke`, `ooo-backend-smoke` | RAT/PRF/ROB/IQ/LSQ structures; end-to-end dispatch, execute, commit |
+| `rv32i-compliance-smoke` | Decoder only: directed RV32I decode and trap-cause checks |
 
-## CSR Support
+Optional flows that need downloads under the git-ignored `third_party/` and
+`.tools/` directories:
 
-The core supports the standard CSR instruction forms:
+- `make act4-run` runs the official ACT4 RV32I suite (39/39 tests pass). See
+  [compliance/act4/README.md](compliance/act4/README.md).
+- `make cbp-sample` or `make cbp-run CBP_TRACE=<trace.gz>` runs the branch
+  predictor RTL on CBP2025 traces. See
+  [verification/perf/cbp/README.md](verification/perf/cbp/README.md).
 
-- `csrrw`, `csrrs`, `csrrc`
-- `csrrwi`, `csrrsi`, `csrrci`
+## Simulation output
 
-Implemented CSR state includes common machine-mode registers and counters:
+- Bytes written to the UART address `0x0000FFE0` appear on the console and in
+  `build/traces/simulation_output.txt`.
+- At the end of a run the harness prints `PERF`, `BPU`, `CACHE I`, `CACHE D`,
+  `SC`, and `LOOP` counter lines. These are simulation-only debug outputs, not
+  software-visible CSRs.
+- CoreMark reads the `cycle` CSR, so `Total ticks` is the real core cycle
+  count. `Total time (secs)` assumes `CORE_CLOCK_HZ` (100 MHz) from
+  `coremark/core_portme.h`.
 
-- `mstatus`, `mie`, `mtvec`, `mscratch`
-- `mepc`, `mcause`, `mtval`, `mip`
-- `mcycle`, `mcycleh`, `minstret`, `minstreth`
-- read aliases `cycle`, `cycleh`, `time`, `timeh`, `instret`, `instreth`
-- read-only IDs such as `misa` and `mhartid`
+## Documentation
 
-Run the CSR smoke test with:
+| Document | Contents |
+| --- | --- |
+| [SPEC.md](SPEC.md) | Microarchitecture, parameters, current performance |
+| [rtl/backend/docs/OoO.md](rtl/backend/docs/OoO.md) | Backend guarantees and known limitations |
+| [rtl/frontend/bpu/README.md](rtl/frontend/bpu/README.md) | Branch predictor design, storage budget, A/B results |
+| [rtl/memory/README.md](rtl/memory/README.md) | I-cache, D-cache, backing memories |
+| [rtl/backend/execute/lsu/README.md](rtl/backend/execute/lsu/README.md) | LSQ, Store Buffer, memory ordering |
 
-```sh
-make csr-smoke
-```
-
-The smoke test temporarily loads `test/csr_smoke.S`, verifies CSR read/write and
-`cycle`, then restores the default CoreMark memory images.
-
-## RTL Integration Testbench
-
-The shared RTL integration testbench is:
+## Source layout
 
 ```text
-verification/integration/core/topCPU_tb.sv
+rtl/core/           topCPU, the top level
+rtl/common/         TypesPkg (shared parameters and types) and interfaces
+rtl/frontend/       fetch and Fetch Queue, decode, branch prediction
+rtl/backend/        dispatch, rename, scheduler, regfile, execute, retire, perf
+rtl/memory/         I-cache, D-cache, backing memories, D-side wrapper
+config/filelists/   ordered RTL file lists shared by all Verilator targets
+verification/       unit and integration testbenches, CBP adapter
+sim/verilator/      C++ simulation harness
+coremark/           CoreMark port, linker scripts, image converters
+test/               CSR smoke test
+compliance/         ACT4 configuration and runner
+tools/kanata/       pipeline-dump converters
+fpga/boards/        placeholder for board integrations (none yet)
+riscv-tests/        legacy hand-built test images, not used by the Makefile
 ```
-
-It writes:
-
-- `build/traces/topCPU_tb_debug.txt`
-- `build/traces/topCPU_tb_output.txt`
-
-The structured dump can be converted to Konata format with:
-
-```sh
-make kanata
-```
-
-## Source Layout
-
-The repository is organized by ownership rather than by generic "functional"
-or "stage" buckets:
-
-- `rtl/core`: top-level CPU composition
-- `rtl/common`: shared types and interfaces
-- `rtl/frontend/{fetch,decode,bpu}`: buffered fetch queue, decoder, BTB/RAS/TAGE/SC
-- `rtl/backend/{dispatch,rename,scheduler,regfile,execute,retire,perf}`: OoO data
-  path and control, with LSU/CSR/integer execution grouped below `execute/`
-- `rtl/memory/{icache,dcache,backing,subsystem}`: cache hierarchy and backing
-  SRAM/BRAM-style memories
-- `config/filelists`: ordered, layered RTL manifests shared by build tools
-- `verification/{unit,integration}`: testbenches separated from synthesizable RTL
-- `sim/verilator`: Verilator C++ harness
-- `tools/kanata`: pipeline-dump conversion tools
-- `coremark`, `test`, `compliance`: software workloads and ISA validation
-
-## Notes
-
-CoreMark now reads the architectural `cycle/mcycle` CSR for timing. The
-reported `Total ticks` value is the real core-cycle delta seen by software.
-
-`Total time (secs)` is derived from `CORE_CLOCK_HZ` in
-`coremark/core_portme.h`, which defaults to `100_000_000` to match the current
-10 ns simulation clock period. If you change the simulated/synthesized clock,
-update that constant so CoreMark's seconds conversion stays consistent.

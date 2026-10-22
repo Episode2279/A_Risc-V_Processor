@@ -188,10 +188,11 @@ stream. The RAS committed shadow still follows execute resolution; a future RAS
 checkpoint/action log is needed to remove that remaining source of wrong-path
 state.
 
-## Current CoreMark capacity/Base A/B result
+## CoreMark A/B results
 
-The same one-iteration CoreMark image and complete synchronous-cache core were
-used for all three runs:
+Each row adds one change to the row above it. All rows use the default
+one-iteration CoreMark image with the same backend and caches; the last row is
+the current default.
 
 | Configuration | Cycles | Retired | IPC | Conditional misses | Miss rate | Conditional MPKI |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -202,47 +203,19 @@ used for all three runs:
 | 8x512 TAGE + Bimodal + Loop + 4-family SC | 580,834 | 859,567 | 1.4799 | 22,392 | 9.4993% | 26.0503 |
 | 8x512 TAGE + Bimodal + Loop + 5-family normalized SC | 580,436 | 859,534 | 1.4808 | 22,234 | 9.4323% | 25.8675 |
 
-The Base replacement removes 1,000 conditional misses at unchanged tagged
-capacity; doubling the tagged tables removes another 1,707. The combined
-configuration reduces conditional misses by 10.404% and raises IPC by 1.405%
-relative to the former default.
+What each step changed:
 
-Relative to the 5x512+Bimodal+SC row, the Loop Predictor removes another 280
-conditional misses and 722 cycles, raising IPC by about 0.122%. It made 483
-directions differ from raw TAGE: 425 corrections and 58 harms, for a net 367
-beneficial pre-SC overrides on that run.
+- Replacing GShare with Bimodal as the base removes 1,000 conditional misses;
+  doubling the tagged tables removes another 1,707.
+- The loop predictor removes 280 more. It overrides TAGE 483 times: 425
+  corrections and 58 harms.
+- Eight tagged tables with a 16 KiB SC remove 641 more (2.8%).
+- Splitting SC into five normalized families removes 158 more (0.7%) and
+  raises IPC by 0.06%. SC then makes 6,301 overrides: 3,270 corrections and
+  3,031 harms.
 
-The original 16 KiB configuration removes 641 conditional misses (2.783%) and raises
-overall IPC by about 0.380% relative to the preceding Loop-enabled row. SC
-made 7,321 overrides (3,770 corrections and 3,551 harms, net +219); the Loop
-Predictor contributed net +363 overrides on the same run.
-
-The five-family repartition then removes another 158 conditional misses
-(0.706%), saves 398 cycles, and raises IPC by about 0.061% without exceeding
-the 16 KiB logical-state limit. Its SC makes 6,301 overrides: 3,270 corrections
-and 3,031 harms, net +239. Family support attribution is Bias +27, Global +152,
-Local +249, IMLI +300, and Path +263. Multiple families can support the same
-override, so these attribution counts overlap.
-
-## Historical SC enable/disable A/B result
-
-The following runs use the same RV32I CoreMark image with 10 iterations and
-2,236,266 retired conditional branches:
-
-| Mode | Cycles | Retired | IPC | Direction misses | Miss rate | Direction MPKI |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| TAGE + GShare, SC disabled | 5,727,837 | 8,062,058 | 1.4075 | 233,869 | 10.4580% | 29.0086 |
-| TAGE + GShare + SC-Lite | 5,698,473 | 8,062,067 | 1.4148 | 219,300 | 9.8065% | 27.2015 |
-
-In the SC-enabled run, SC changed 35,782 raw TAGE decisions: 24,782 overrides
-corrected a raw miss and 11,000 harmed a raw-correct prediction, for 13,782 net
-beneficial overrides on that execution trajectory. Relative to the SC-disabled
-run, cycles fall by about 0.513%, IPC rises by about 0.519%, and direction MPKI
-falls by 1.8071. The A/B miss-count delta need not exactly equal the within-run
-override balance because enabling SC changes speculative histories and the
-subsequent predictor-training trajectory.
-
-These simulator runs are performance comparisons, not official CoreMark scores.
-The expected CRCs and `tohost` success are produced, but ten iterations complete
-in less than CoreMark's required 10-second validation interval, so its UART
-output includes the standard `Errors detected` duration warning.
+The gains are now small, so the remaining CoreMark misses are not mainly a
+table-capacity problem (see the `__mulsi3` note in
+[SPEC.md](../../../SPEC.md#current-performance)). Override counts come from a
+single run, so their net balance need not equal the change in misses between
+runs.

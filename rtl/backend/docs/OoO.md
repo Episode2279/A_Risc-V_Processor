@@ -1,88 +1,52 @@
-# PRF out-of-order core
+# Out-of-order backend: guarantees and limitations
 
-The PRF/ROB architecture is the primary and only executable `topCPU` datapath.
-The former sequential execute/memory/writeback pipeline has been removed.
+This page lists what the backend RTL guarantees and where it is deliberately
+conservative. Structure and sizes are in [SPEC.md](../../../SPEC.md).
 
-## Current dataflow
+## Guarantees
 
-1. `DualIfStages` launches an F0 `PC`/`PC+4` request into the synchronous
-   I-cache and BPU in parallel. Their aligned F1 response supplies two
-   instructions into the eight-entry `FetchQueue`; an I-cache miss blocks and refills the
-   missing 16-byte line before the response becomes valid.
-2. Two `IdStages` decoders produce architectural-register micro-operations.
-3. `DispatchControl` atomically reserves every resource an accepted operation
-   needs. `RenameStage` translates source/destination names with the speculative
-   RAT and allocates a new physical destination.
-4. Every operation enters the ROB and unified Issue Queue. Memory operations
-   also enter the LSQ in program order.
-5. The unified scheduler exposes memory/CSR, integer/branch, and second-integer
-   candidates but accepts at most two. A ready memory uop pairs with one
-   integer/branch uop. If LSQ ordering or sustained cache request pressure
-   blocks it, it remains in the IQ and two integer uops may use the two integer
-   execution paths. The LSU checks older LSQ Stores before allowing a Load.
-6. Loads access the blocking synchronous D-cache when non-aliasing, or forward
-   from the youngest older Store that fully covers their bytes. Stores only
-   calculate and record address/data during execution.
-7. The ROB retires a contiguous completed prefix of up to two operations. The
-   committed map is updated, replaced physical registers return to the free
-   list, and a retiring Store is transferred to the D-cache write-through port.
+- `x0`/`p0` is never renamed or written.
+- Dispatch is all-or-nothing per instruction: ROB, issue-queue, LSQ, and
+  free-register space are reserved together.
+- Allocating a destination register clears its ready bit before any consumer
+  can issue.
+- The ROB allocates and retires in program order. Retirement takes a
+  contiguous prefix of completed entries, up to two per cycle.
+- ROB and LSQ retire together, and the LSQ head tag must match the ROB entry.
+- A memory uop leaves the issue queue only in the cycle the LSU accepts it.
+- No Store changes memory or MMIO before its ROB entry retires.
+- A branch misprediction keeps the branch, removes every younger ROB,
+  issue-queue, and LSQ entry, and restores the RAT, free list, and predictor
+  histories from the branch's checkpoint.
+- Results from removed uops are dropped. A Load response for a removed Load is
+  still taken from the D-cache but writes nothing.
+- Exceptions are taken only at the ROB head. A trap flushes the backend and
+  rebuilds the speculative RAT and free list from the committed RAT.
+- CSR instructions, FENCE, FENCE.I, ECALL, EBREAK, and MRET dispatch only into
+  an empty backend, and nothing else dispatches until they retire.
 
-## Architectural invariants
+## Known limitations
 
-- Architectural `xN` initially maps to physical `pN`; `x0/p0` is immutable.
-- Physical registers `p32` through `p47` start free.
-- Destination allocation clears the new physical register's ready bit before
-  dependent operations may issue.
-- ROB allocation and retirement are in program order even though integer
-  completion may occur out of order.
-- Dispatch is atomic across ROB, issue queue, LSQ, and free-list requirements.
-- No Store modifies RAM or MMIO before its ROB entry retires.
-- ROB and LSQ retirement advance atomically and verify matching LSQ tags.
-- The committed map provides a precise free-list reconstruction point for a
-  full speculative flush.
+- Lane 1 never dispatches a branch, jump, CSR, or serializing instruction; it
+  waits one cycle to move to lane 0.
+- There is one LSU, so at most one memory uop issues per cycle.
+- A Load waits for every older Store address. There is no memory-dependence
+  prediction and no Load replay.
+- A Load that partly overlaps an older Store, or needs data the Store does not
+  have yet, waits.
+- A Load that overlaps a retired Store still in the Store Buffer waits for it
+  to drain. Direct forwarding from the Store Buffer is disabled; see
+  [the LSU README](../execute/lsu/README.md).
+- MMIO Stores block all younger Loads. An MMIO Load issues only from the LSQ
+  head with an empty Store Buffer.
+- The RAS committed copy is updated when a branch resolves rather than when it
+  retires, and the RAS has no per-branch checkpoint.
+- The I-cache blocks on a miss. The D-cache has one MSHR and is write-through
+  with no write-allocate.
 
-## Current performance boundary
+## Possible next steps
 
-Two integer operations, or one integer paired with one branch/CSR/memory
-operation, may issue in the same cycle. The two-integer fallback also applies
-while a selected memory uop is blocked, without removing that memory uop from
-the IQ. There is one LSU port, so two memory operations cannot issue together.
-The IQ and LSU handshake is atomic: a held memory candidate cannot launch a
-request behind a deasserted IQ Ready.
-Loads may pass older Stores whose addresses are known not to overlap. A Load is
-forwarded from the youngest older Store that fully covers its requested bytes;
-unknown Store addresses, unavailable Store data, and partial overlap cause a
-conservative wait until the Store retires.
-
-The current D-cache is a one-outstanding-request, direct-mapped 1 KiB structure
-with 64 sets and 16-byte lines. Load misses refill all four words before the
-Load completes. Stores are write-through and do not allocate on a miss; MMIO is
-uncached. Consequently, the blocking memory hierarchy can hold the sole LSU
-port during a miss and is an explicit performance boundary.
-
-The LSU does not yet predict past unknown Store addresses or replay a violated
-Load. Store address and data wake together because the current Memory Queue
-requires both source operands before issue. Conditional branches use a
-five-table TAGE predictor with a Bimodal base and compact statistical corrector;
-the BTB supplies taken targets. Multiple branches may be in flight
-concurrently. Each branch carries a RAT/free-list
-checkpoint, and a misprediction selectively removes younger ROB, IQ, and LSQ
-state. JAL/JALR are predicted with direct targets/BTB/RAS and are no longer
-serialized; CSR and ordering operations retain serialization. The GHR updates
-speculatively and recovers from ROB-tagged checkpoints. Illegal instructions,
-ECALL/EBREAK, and misaligned instruction
-or data accesses are recorded in the ROB and take a precise machine-mode trap at
-the head; trap entry updates `mepc`, `mcause`, `mtval`, and `mstatus`, while MRET
-restores interrupt-enable state and redirects through `mepc`.
-
-Each ROB branch entry retains its Bimodal index, TAGE/SC prediction metadata,
-and resolved outcome. The Bimodal PHT, tagged TAGE tables, SC signed counters,
-BTB, and branch statistics update from the in-order retirement stream; execute
-resolution drives redirect and speculative-history recovery. There is no
-standalone local-history predictor or Tournament chooser. The current RAS
-committed shadow also updates at resolution pending a checkpoint/action log.
-
-The next performance milestone is decoupled Store-address/data wakeup plus Load
-replay or memory-dependence prediction. RAS checkpointed recovery and a
-speculative predictor-update log are possible follow-ups if commit-training
-latency becomes a dominant front-end cost.
+- Memory-dependence prediction with Load replay.
+- Re-enable Store Buffer forwarding through a registered, ROB-tagged
+  completion path once the CoreMark failure is understood.
+- A RAS checkpoint or action log.

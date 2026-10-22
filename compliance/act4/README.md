@@ -20,12 +20,23 @@ The current RTL passes all 39 generated RV32I `I` extension tests. This result
 does not claim certification for the full privileged architecture or Zicsr;
 those suites remain out of scope until all required CSRs and interrupts exist.
 
-Run the generated ELFs on the DUT with:
+## Running
 
 ```sh
 make act4-run
 ```
 
-The runner mirrors each ELF image into the Harvard instruction and data
-memories, uses a compliance-only 1 MiB memory configuration, and reports a
-nonzero exit status if any self-checking ELF fails or times out.
+This builds a 1 MiB-memory Verilator model and runs every ELF it finds. It
+needs two things that are not in the repository:
+
+- The test ELFs in `compliance/act4/work/a-riscv-processor-rv32i/elfs/rv32i/I/`.
+  Generate them with the upstream framework in `third_party/riscv-arch-test`
+  (see its README), with `CONFIG_FILES` set to this directory's
+  `test_config.yaml` and `WORKDIR` set to `compliance/act4/work`. Generation
+  also needs the Sail reference model `sail_riscv_sim` on `PATH`
+  (`.tools/sail-riscv/bin/`).
+- The RISC-V GCC 15 toolchain in `.tools/riscv-gcc-15/`, used both by
+  `test_config.yaml` and by the runner's `objcopy` step.
+
+The runner loads each ELF into both the instruction and data memories and
+returns a nonzero exit status if any test fails or times out.
